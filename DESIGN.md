@@ -1,10 +1,11 @@
 # Hermes 可视化监控面板 — 设计与实施计划
 
-> 状态：**M1/M2 代码完成，M3 部分完成**（2026-10-22 立项并同日落代码；托管/访问方案定稿：Cloudflare Tunnel，见 §5）
-> 目标文件：`dashboard/`（新增），部署脚本 `server/dashboard-deploy.sh`
-> 本文档是执行依据：模块清单、数据源、接口契约、分期任务、验收标准都在这里。
-> 实现说明见 `dashboard/README.md`；本机演示：`HERMES_DASHBOARD_DEMO=1`。上线 systemd 与
-> Cloudflare DNS / Access 尚未执行，需按 §7 约窗口期。
+> 状态：**M1 内网已上线，M2 完成，M3 部分完成**（2026-10-22 立项、开发并部署；托管/访问方案定稿：Cloudflare Tunnel，见 §5）
+> 目标文件：`dashboard/`、`server/dashboard-deploy.sh`
+> 当前版本：commit `05ead9b`，systemd `hermes-dashboard` 已运行，仅绑 `127.0.0.1:8787`
+> 本文档是执行依据：模块清单、数据源、接口契约、分期任务、验收标准、上线记录与每日续跑清单都在这里。
+> 实现说明见 `dashboard/README.md`；本机演示：`HERMES_DASHBOARD_DEMO=1`。
+> 未完成：Cloudflare DNS/Tunnel/Access（需窗口期）、停服端到端演练；两个线上运维问题由老板另行修复（见 §12）。
 
 ---
 
@@ -245,9 +246,9 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
 - [x] `errors` 采集器（groups.json + approvals）
 - [x] `overview` 聚合
 - [x] 前端：角色卡 + 服务健康 + 任务看板 + 错误区
-- [x] `dashboard-deploy.sh` + systemd，绑定 127.0.0.1（脚本已就绪，待服务器执行）
-- [ ] cloudflared 部署：systemd 服务 + ingress → `localhost:8787`，`hermes.joeli.site` Tunnel hostname + Access policy（前置：DNS zone 迁入 Cloudflare，见 §5；动手前与老板约窗口期）
-- [ ] 端到端验证：手动停 `hermes-biubiu`，页面 30s 内变红（需上线后执行）
+- [x] `dashboard-deploy.sh` + systemd，绑定 127.0.0.1（2026-10-22 已部署，`active/enabled`）
+- [ ] cloudflared 部署：systemd 服务 + ingress → `localhost:8787`，`hermes.joeli.site` Tunnel hostname + Access policy（前置：DNS zone 迁入 Cloudflare，见 §5；动手前与老板约窗口期。现状：cloudflared 未安装、DNS 仍在 Vercel）
+- [ ] 端到端验证：手动停 `hermes-biubiu`，页面 30s 内变红（需在窗口期执行，尚未做）
 
 ### M2 — 特色模块
 - [x] `activity`（state.db 只读 + 7d 热力图）
@@ -257,7 +258,7 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
 - [x] 前端补齐对应区块
 
 ### M3 — 成本与实时
-- [x] `usage`（按 profile 的 token/成本，额度不可得时明确标注）
+- [x] `usage`（按 profile 的 token/成本，额度不可得时明确标注；**实测：token 真实，成本因订阅制无单价而标不可用**）
 - [x] SSE 日志流 + 脱敏
 - [ ] 配置漂移与系统资源
 - [x] 移动端适配（手机上也能看）
@@ -298,4 +299,146 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
 
 ## 11. 新会话开场提示词
 
-> 读 `docs/dashboard-plan.md`，按 M1 开始实现。先定接口契约和后端骨架，再写前端。数据源以服务器实际输出为准，不要编造字段。每完成一个采集器，用真实命令验证一次。遇到需要我决策的（技术栈/额度接口）先问再动手；访问与托管已定稿（§5），按 Cloudflare Tunnel 执行，DNS 迁移动手前先约窗口期。
+> 读 `docs/dashboard-plan.md`，先看 §12 上线记录和 §13 每日续跑清单，不要重做已完成模块。
+> 当前面板已在服务器 `hermes-dashboard` 上运行（仅 127.0.0.1:8787）。每天先做 §13 的例行核对，
+> 再处理未完成项：Cloudflare Tunnel / Access（必须约窗口期，见 §5）、停服演练、M3 配置漂移。
+> 面板只读，任何 repair 动作走既有 runbook，不通过面板写线上状态；不要覆盖 `/root/hermes-board/`
+> 与 `/root/hermes-errors/`。改代码后按 §13.4 的发布流程走，并把结果补进 §12。
+> 遇到老板正在修的问题（§12.3）不要重复修，只记录状态。
+
+---
+
+## 12. 上线与验证记录（2026-10-22）
+
+### 12.1 部署现状
+
+- 代码基线：commit `05ead9b`（已推 `origin` 与 `server` 两端）；之后仅文档收尾，未改面板逻辑
+- systemd：`hermes-dashboard` **active / enabled**，`ExecStart` 使用 `/root/hermes-dashboard/.venv/bin/uvicorn`
+- 监听：`127.0.0.1:8787`；外部访问 8787 超时，未开入站端口
+- 部署方式：`bash server/dashboard-deploy.sh`（幂等，已重新执行确认）
+- 访问：当前只能 SSH 隧道，例如 `ssh -L 8788:127.0.0.1:8787 root@<server>` → `http://127.0.0.1:8788`
+- **外网未上线**：`cloudflared` 未安装；`joeli.site` DNS 仍在 Vercel（验证时解析到 `216.198.79.1`）；
+  `hermes.joeli.site` 尚不解析
+
+### 12.2 数据核对（验证时点 2026-10-22 17:30 左右）
+
+| 项目 | 实测 |
+|---|---|
+| 服务 | 6 / 6 active；8642 API 200 |
+| 角色 | 憨包在线；汉堡、biubiu 服务在线但静默 >2h |
+| 今日消息 | 憨包 228 / 汉堡 16 / biubiu 19 |
+| 7d 活跃度 | 504 格；hanbao 1720 / hamburger 180 / biubiu 105 |
+| 定时任务 | crontab 14 条；`hermes_parse=ok`；共 28 项（含个人提醒） |
+| 错误中枢 | 14 源、295 条；与当日 `groups.json` 源数一致 |
+| 审批 | 待批 3；`approvals/` 实际 16 个文件，状态计数一致 |
+| 额度 | 3 个唯一 key（主线路+汉堡共用一把）；余量 75% |
+| 延迟 | p50：憨包 11.3s / 汉堡 11.4s / biubiu 5.3s |
+| 事件 | 8 条，含 gateway 崩溃、watcher 失败、Twitch 失败、身体转段 |
+
+### 12.3 面板暴露出的真实问题（老板修复中，不属面板缺陷）
+
+1. **gateway 当天窗口外崩溃重启 5 次**（10:48、12:09、12:54 等）——需查 OOM / Discord WebSocket。
+2. **`repair-watcher.sh` 八进制 bug**：`line 52` 把 `08`/`09` 当八进制 → `NOW_MIN: unbound variable`，每 10 分钟空跑。
+3. **Twitch Drops** 2026-10-21 17:33 因 LLM 503 跳过，下一轮自然重试。
+
+> 这三项由老板直接修；面板已正确标红，不需要在 dashboard 代码里绕过或降级显示。
+
+### 12.4 本轮已修复的采集问题
+
+1. systemd 的 `Id=hermes-gateway.service` 与配置 key 不一致 → 统一去 `.service` 后缀。
+2. 活跃度只读主库 → 改为四库只读汇总（default / hamburger / heybox / biubiu），排除 tool 消息。
+3. 服务环境 PATH 无 `hermes` → 绝对路径 `/root/.local/bin/hermes`，default + hamburger 两个 profile 都解析。
+4. `[COLLECTED]` 误判失败、`[LLM_FAILED]` 漏判 → 修正日志分类。
+5. `每日教义` 占位 schedule 显示成每年 1 月 1 日 → 改为“由教义触发器唤起 · 10:00”。
+6. 三路 ETF、两路昵称签名重名 → 加计划/平台后缀区分。
+7. 首屏 overview 冷启动 8s → 启动预热 + 并发采集 + 同 key 锁合并，热态约 1s。
+8. 成本全为 0 → 不再显示 `$0.00`，明确标“订阅制、成本不可用”，token 照常显示。
+9. 角色延迟为空 → 用 user→assistant 消息配对计算 p50/p95（上限 5 分钟）。
+10. 角色“静默”判定 → 服务在线但 2 小时无消息即显示静默。
+
+### 12.5 数据口径（后续不要误解）
+
+- **active 消息**：只统计 `user` / `assistant`，不含 tool；四个 profile 库合并。
+- **p50/p95**：端到端“用户消息 → 下一条助手消息”，包含工具循环与思考时间，不是模型首 token 延迟。
+- **成本**：OpenCode Go 为订阅制，`sessions.estimated_cost_usd` 全为 0；只展示 token 用量，成本标不可用。
+- **额度**：主线路与汉堡 profile 共用同一把 key，已合并展示；黑盒、biubiu 各有独立 key。
+- **静默**：服务 active 且 2 小时内无消息；不等于进程挂掉。
+- **jobs**：包含全部 Hermes cron（含一次性个人提醒）与系统 crontab，所以数量会多于 §2 的核心任务清单。
+
+### 12.6 验收标准对照
+
+| # | 标准 | 状态 |
+|---|---|---|
+| 1 | 停服务 30s 内角色卡变红 | **未演练**（需窗口期，见 §13.3） |
+| 2 | cron 失败在任务板与事件流同时可见 | **已验证**（watcher / Twitch 实际失败均出现） |
+| 3 | 待批/修复中与 approvals 一致 | **已验证**（待批 3，文件计数一致） |
+| 4 | 刷新无写操作、无 exec 报错 | **已验证**（接口只读；journal 无 exec 报错） |
+| 5 | 外网不能直连 8787、前端无密钥 | **部分**（8787 外网超时、源码已脱敏；Tunnel/Access 未做） |
+| 6 | 单源故障不影响其他模块 | **本地已验证**（空数据下 9 个模块独立降级；生产当前全源健康） |
+
+---
+
+## 13. 每日续跑清单（次日从这里开始）
+
+### 13.1 例行核对（5 分钟）
+
+```bash
+ssh root@<server>
+systemctl is-active hermes-dashboard
+bash /root/HamburgerBao/server/dashboard-deploy.sh --check
+curl -s http://127.0.0.1:8787/api/overview | python3 -m json.tool | head -40
+curl -s http://127.0.0.1:8787/api/jobs | python3 -m json.tool | head -60
+```
+
+页面/接口重点看：
+
+1. `global.online_services` 是否 6/6；API 8642 是否 OK。
+2. `jobs` 中 `result=failed` 的项；是否有新增失败。
+3. `approvals.pending` 是否等于 `approvals/` 的实际状态计数。
+4. `errors.trend` 是否异常翻倍；`failed_sources` 是否非空。
+5. `usage.quota[].remaining` 是否低于 20%。
+6. 三个角色是否长时间 `silent`（2h 无消息）而服务仍 active。
+7. `warnings` 是否出现 `state.db`、`crontab`、`hermes cron` 读取失败。
+
+> 面板本身只读。以上任何异常，修复动作走对应服务的既有 runbook，不通过面板写状态。
+
+### 13.2 老板正在修的两项
+
+- [ ] gateway 窗口外崩溃：等老板修完 OOM/WS 后，确认 `errors.restarts.crash` 当天归零。
+- [ ] `repair-watcher.sh`：等老板修完八进制 bug 后，确认 `jobs` 里“修复 watcher”不再是 failed，且 watcher 日志不再出现 `NOW_MIN`。
+
+修复完成后，在本节打勾并更新 §12.3，不要重复修。
+
+### 13.3 仍待执行（需窗口期）
+
+1. **停服演练**：`systemctl stop hermes-biubiu` → 30s 内页面变红 → `start` 恢复；完成后勾选 §7 M1 最后一项。
+2. **Cloudflare**：按 §5 顺序执行 DNS 记录抄全 → NS 迁移 → Tunnel → Access；不要跳过 DNSSEC 与 MX 检查。
+3. **M3 剩余**：配置漂移（SOUL.md / config.yaml / 部署 commit）与系统资源（CPU/内存/磁盘/网络）。
+
+### 13.4 改代码后的发布流程
+
+```bash
+# 本地
+git add dashboard server/dashboard-deploy.sh docs/dashboard-plan.md
+git commit -m "dashboard: ..."
+git push origin main
+git push server main
+
+# 服务器
+cd /root/HamburgerBao
+bash server/dashboard-deploy.sh
+bash server/dashboard-deploy.sh --check
+
+# 验证
+curl -s http://127.0.0.1:8787/api/overview | python3 -m json.tool | head -40
+systemctl status hermes-dashboard --no-pager
+```
+
+发布后把新 commit、异常与数据口径变化补进 §12，保持“计划 = 事实”。
+
+### 13.5 不要做的事
+
+- 不要通过面板触发 cron、跑 repair、改 board / approvals / 配置。
+- 不要让部署脚本覆盖 `/root/hermes-board/` 与 `/root/hermes-errors/`。
+- 不要在未备份 DNS 记录、未确认 DNSSEC/MX 的情况下切 NS。
+- 不要把演示数据当成实时数据；有 `demo=true` 或 DEMO 黑条时必须明确标注。

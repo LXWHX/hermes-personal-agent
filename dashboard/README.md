@@ -12,6 +12,13 @@
        systemd / journalctl / crontab / hermes-errors / hermes-board / state.db
 ```
 
+## 当前状态（2026-10-22）
+
+- 服务器内网已上线：`hermes-dashboard` active/enabled，仅 `127.0.0.1:8787`
+- 外网未开放：`cloudflared` 未安装，DNS 尚未迁入 Cloudflare，`hermes.joeli.site` 不解析
+- 数据源已核对：6/6 服务、四个 profile 的 state.db、14 个错误源、approvals 计数一致
+- 详细验证数据、口径与每日检查清单见 [`docs/dashboard-plan.md` §12–§13](../docs/dashboard-plan.md)
+
 ## 快速开始
 
 ### 演示数据（本机，无需服务器）
@@ -102,10 +109,12 @@ Zero Trust 配置：
 
 ## 已知限制
 
-- `state.db` 的真实 schema 未在本机验证；采集器做了自省和降级，首次上线请核对
-  `GET /api/activity` 的 `roles/totals` 是否与 `hermes` 会话数量一致。
-- token / 成本为**本地估算**；OpenCode Go 若没有逐会话用量，表格会显示不可用而不是编数。
-- `hermes cron list` 输出格式可能随版本变化；解析器失败时标 `UNKNOWN`。
+- `state.db` 已在 2026-10-22 对真实库验证：`messages` JOIN `sessions`，按四个 profile 库汇总；
+  tool 消息不计入活跃度。
+- token 用量真实；**成本不可用**：OpenCode Go 为订阅制，`sessions.estimated_cost_usd` 全为 0，
+  面板显示“—”而不是编造金额。
+- p50/p95 是“用户消息 → 下一条助手消息”的端到端延迟，包含工具循环，不是模型首 token 延迟。
+- `hermes cron list` 输出格式可能随版本变化；解析失败时标 `UNKNOWN`，不会编字段。
 - Cloudflare DNS 迁移与 Access 策略需在窗口期人工确认，部署脚本不代改 DNS。
 - 移动端 390px / 平板 768px / 桌面 1440px 已做布局检查，无横向溢出；表格与热力图在小屏内横向滚动。
 
