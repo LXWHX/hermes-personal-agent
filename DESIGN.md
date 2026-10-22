@@ -406,6 +406,7 @@ curl -s http://127.0.0.1:8787/api/jobs | python3 -m json.tool | head -60
 
 - [ ] gateway 窗口外崩溃：等老板修完 OOM/WS 后，确认 `errors.restarts.crash` 当天归零。
 - [ ] `repair-watcher.sh`：等老板修完八进制 bug 后，确认 `jobs` 里“修复 watcher”不再是 failed，且 watcher 日志不再出现 `NOW_MIN`。
+  - ⚠️ watcher 目前只在出错/点火时写日志，成功时完全静默。修好后若没有新的日志行，面板会一直停留在上一次 `failed`（按日志 mtime 判结果）。建议顺手加一条低频成功心跳（如每小时最多一行 `[WATCHER_OK]`），或修好后手动跑一次并留一行成功证据。
 
 修复完成后，在本节打勾并更新 §12.3，不要重复修。
 
