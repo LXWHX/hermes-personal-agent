@@ -125,24 +125,36 @@ def _briefing_item() -> dict:
     output = ROOT / ".hermes" / "cron" / "output"
     candidates = []
     if output.is_dir():
-        for path in output.rglob("*"):
-            if not path.is_file():
+        files = sorted((p for p in output.rglob("*") if p.is_file()),
+                       key=lambda p: p.stat().st_mtime, reverse=True)[:120]
+        for path in files:
+            try:
+                head = path.read_text(encoding="utf-8", errors="replace")[:600]
+            except OSError:
                 continue
-            haystack = "/".join(path.parts[-3:]).lower()
-            if "早报" in haystack or "brief" in haystack or "morning" in haystack:
+            haystack = head.lower()
+            if "憨包早报" in head or "morning briefing" in haystack or "morning-briefing" in haystack:
                 candidates.append(path)
-    newest = max(candidates, key=lambda p: p.stat().st_mtime) if candidates else None
+    newest = candidates[0] if candidates else None
     if not newest:
         return {"id": "briefing", "name": "憨包早报", "latin": "MORNING BRIEFING",
                 "last_run": None, "result": "unknown", "title": "无记录",
                 "excerpt": "[UNAVAILABLE] 未找到 cron 输出记录", "deliveries": [], "available": False}
     mtime = datetime.fromtimestamp(newest.stat().st_mtime, TZ)
-    text = read_text(newest, 4000)
-    title = next((l.strip("# ").strip() for l in text.splitlines() if l.strip()), "早报")
+    text = read_text(newest, 80_000)
+    response = text.split("## Response", 1)[-1] if "## Response" in text else text
+    meaningful = [l.strip() for l in response.splitlines() if l.strip() and not l.startswith("```")]
+    title = meaningful[0][:100] if meaningful else "早报"
+    if "[SILENT]" in response:
+        result, title = "silent", "静默（无内容投递）"
+    elif "[CRON_FAILURE]" in response:
+        result = "failed"
+    else:
+        result = "success"
     return {"id": "briefing", "name": "憨包早报", "latin": "MORNING BRIEFING",
-            "last_run": mtime.isoformat(timespec="seconds"), "result": _classify(text),
+            "last_run": mtime.isoformat(timespec="seconds"), "result": result,
             "title": redact(title)[:100],
-            "excerpt": redact(" ".join(l.strip() for l in text.splitlines()[:5]))[:280],
+            "excerpt": redact(" ".join(meaningful[:3]))[:280],
             "deliveries": _deliveries(text), "available": True}
 
 

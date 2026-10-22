@@ -443,7 +443,15 @@ main { padding: 0 var(--pad); }
   color: var(--grey);
   align-self: center;
 }
-.role__metric-value { font-size: 12px; font-weight: 700; text-align: right; }
+.role__metric-value {
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .role__metric-note {
   grid-column: 1 / -1;
   font-size: 9px;
@@ -541,6 +549,8 @@ main { padding: 0 var(--pad); }
 .table--services td:last-child { min-width: 150px; color: var(--grey); font-size: 9px; }
 .table--jobs td:last-child { min-width: 210px; color: var(--grey); font-size: 9px; }
 .table--jobs td:first-child { font-weight: 700; white-space: nowrap; }
+.table--jobs td:nth-child(2),
+.table--jobs td:nth-child(3) { white-space: nowrap; }
 .table--approvals td:first-child { min-width: 160px; font-weight: 700; }
 .table--approvals td:last-child { min-width: 190px; color: var(--grey); font-size: 9px; }
 

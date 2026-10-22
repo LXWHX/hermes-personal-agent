@@ -38,6 +38,17 @@ def _find_output(outputs: dict, item_id: str) -> dict:
     return next((o for o in outputs.get("items", []) if o.get("id") == item_id), {})
 
 
+def _result_cn(value: str | None) -> str:
+    return {"success": "成功", "silent": "静默", "failed": "失败",
+            "skipped": "跳过", "unknown": "未知"}.get(value or "", value or "—")
+
+
+def _short_time(value: str | None) -> str:
+    if not value:
+        return "—"
+    return value[11:16] if len(value) >= 16 and value[10] == "T" else value
+
+
 def collect(services: dict, jobs: dict, errors: dict, board: dict, activity: dict,
             outputs: dict, usage: dict) -> dict:
     gateway = _find_service(services, "hermes-gateway")
@@ -63,18 +74,28 @@ def collect(services: dict, jobs: dict, errors: dict, board: dict, activity: dic
     status_board = board.get("status") or {}
     body_items = [i for s in status_board.get("sections", []) if s.get("name") == "身体" for i in s.get("items", [])]
 
-    def role_state(service: dict, msgs: int | None) -> tuple[str, str]:
+    def role_state(service: dict, msgs: int | None, last: str | None) -> tuple[str, str]:
         if service.get("active") and service.get("active") != "active":
             return "offline", "离线"
         if service.get("active") == "active":
-            if msgs == 0:
+            if not msgs:
+                return "silent", "静默"
+            last_dt = None
+            if last:
+                try:
+                    last_dt = datetime.fromisoformat(last)
+                except (ValueError, TypeError):
+                    last_dt = None
+            if last_dt and last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=now().tzinfo)
+            if last_dt and (now() - last_dt).total_seconds() > 7200:
                 return "silent", "静默"
             return "online", "在线"
         return "unknown", "未知"
 
-    hanbao_state = role_state(gateway, hanbao_msgs)
-    burger_state = role_state(eye, burger_msgs)
-    biu_state = role_state(biubiu, biu_msgs)
+    hanbao_state = role_state(gateway, hanbao_msgs, hanbao_last)
+    burger_state = role_state(eye, burger_msgs, burger_last)
+    biu_state = role_state(biubiu, biu_msgs, biu_last)
 
     roles = [
         {
@@ -88,9 +109,9 @@ def collect(services: dict, jobs: dict, errors: dict, board: dict, activity: dic
             "model": model, "failed_requests": failed_total,
             "metrics": [
                 {"label": "心跳轮次", "value": heartbeat.get("schedule_label") or "—",
-                 "note": heartbeat.get("last_run") or "无记录"},
-                {"label": "早报", "value": (briefing.get("last_run") or "—")[11:16] if briefing.get("last_run") else "—",
-                 "note": briefing.get("result") or "无记录"},
+                 "note": f"上次 {_short_time(heartbeat.get('last_run'))} · {_result_cn(heartbeat.get('result'))}"},
+                {"label": "早报", "value": _short_time(briefing.get("last_run")),
+                 "note": _result_cn(briefing.get("result"))},
                 {"label": "PLAN / STATUS", "value": f"{len(open_tasks)} / {len(body_items)}",
                  "note": f"{plan.get('overdue', 0)} 条逾期"},
             ],
@@ -108,10 +129,10 @@ def collect(services: dict, jobs: dict, errors: dict, board: dict, activity: dic
             "metrics": [
                 {"label": "Eye 观察", "value": "运行中" if eye.get("active") == "active" else "停止",
                  "note": eye.get("last_event") or "—"},
-                {"label": "今日教义", "value": doctrine.get("schedule_label") or "—",
-                 "note": doctrine.get("result") or "无记录"},
-                {"label": "游戏快报", "value": game_news.get("result") or "—",
-                 "note": (game_news.get("last_run") or "—")[11:16]},
+                {"label": "今日教义", "value": "10:00",
+                 "note": f"触发器 · {_result_cn(doctrine.get('result'))}"},
+                {"label": "游戏快报", "value": _result_cn(game_news.get("result")),
+                 "note": f"上次 {_short_time(game_news.get('last_run'))}"},
             ],
             "headline": f"Discord + 小黑盒 · 今日消息 {burger_msgs if burger_msgs is not None else '—'}",
         },
@@ -128,8 +149,8 @@ def collect(services: dict, jobs: dict, errors: dict, board: dict, activity: dic
                 {"label": "房间状态", "value": "在线" if biubiu.get("active") == "active" else "离线",
                  "note": biubiu.get("unit") or "—"},
                 {"label": "语音回合", "value": biu_msgs if biu_msgs is not None else "—", "note": "今日消息"},
-                {"label": "BiuNews", "value": (_find_output(outputs, "digest").get("result") or "—"),
-                 "note": (_find_output(outputs, "digest").get("last_run") or "—")[11:16]},
+                {"label": "BiuNews", "value": _result_cn(_find_output(outputs, "digest").get("result")),
+                 "note": f"上次 {_short_time(_find_output(outputs, 'digest').get('last_run'))}"},
             ],
             "headline": "房间在线" if biubiu.get("active") == "active" else "服务停止，房间不可用",
         },
@@ -147,9 +168,12 @@ def collect(services: dict, jobs: dict, errors: dict, board: dict, activity: dic
         note_bits.append(f"{failed_jobs} 个任务失败")
     if plan.get("overdue"):
         note_bits.append(f"{plan['overdue']} 条任务逾期")
+    crashes = (errors.get("restarts") or {}).get("crash") or 0
+    if crashes:
+        note_bits.append(f"gateway 窗口外崩溃 {crashes} 次")
     if not note_bits:
         note_bits.append("无待处理告警")
-    state = "degraded" if (offline or failed_jobs or plan.get("overdue")) else "ok"
+    state = "degraded" if (offline or failed_jobs or plan.get("overdue") or crashes) else "ok"
 
     return {
         "global": {

@@ -60,6 +60,13 @@ def collect(services: dict, jobs: dict, errors: dict, board: dict) -> dict:
                                 f"今日 {today_count} 条，前 6 日均值 {sum(history) / len(history):.1f}",
                                 "system"))
 
+    crash = (errors.get("restarts") or {}).get("crash") or 0
+    if crash:
+        items.append(_event(now().isoformat(timespec="seconds"), "service", "error",
+                            f"gateway 窗口外崩溃重启 {crash} 次",
+                            "非部署窗口的失败自愈，建议查看 OOM / Discord WS",
+                            "system"))
+
     for section in (board.get("plan") or {}).get("sections", []):
         for task in section.get("tasks", []):
             if task.get("overdue"):

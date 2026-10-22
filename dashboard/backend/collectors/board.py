@@ -138,17 +138,20 @@ def _parse_status() -> dict:
         for item in section["items"]:
             at = item["fields"].get("转段")
             if at and "已提" not in item["fields"]:
+                match = re.match(r"(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})", at)
+                if not match:
+                    continue
                 try:
-                    parsed = datetime.fromisoformat(at.replace(" ", "T"))
-                    if parsed.tzinfo is None:
-                        parsed = parsed.replace(tzinfo=now().tzinfo)
+                    parsed = datetime.fromisoformat(f"{match.group(1)}T{match.group(2)}")
+                    parsed = parsed.replace(tzinfo=now().tzinfo)
                     if next_transition is None or parsed < transition_at:
                         transition_at = parsed
+                        action = at[match.end():].strip(" ：:，,")
                         next_transition = {
                             "title": item["title"],
-                            "at": at,
+                            "at": f"{match.group(1)} {match.group(2)}",
                             "stage": item["fields"].get("阶段", ""),
-                            "note": item["fields"].get("护理", ""),
+                            "note": action or item["fields"].get("护理", ""),
                         }
                 except ValueError:
                     pass

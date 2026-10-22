@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -73,10 +75,12 @@ def _outputs() -> dict:
     return _load("outputs", outputs.collect)
 
 
-def _usage() -> dict:
+def _usage(include_quota: bool = True) -> dict:
     if DEMO:
         return demo.snapshot()["usage"]
-    return CACHE.get("usage", 60, usage.collect)
+    if include_quota:
+        return CACHE.get("usage", 60, usage.collect)
+    return CACHE.get("usage:profiles", 45, lambda: usage.collect(False))
 
 
 @app.get("/health")
@@ -89,7 +93,20 @@ def api_overview():
     if DEMO:
         return _respond(demo.snapshot()["overview"])
     try:
-        data = overview.collect(_services(), _jobs(), _errors(), _board(), _activity(), _outputs(), _usage())
+        with ThreadPoolExecutor(max_workers=7) as pool:
+            futures = {
+                "services": pool.submit(_services),
+                "jobs": pool.submit(_jobs),
+                "errors": pool.submit(_errors),
+                "board": pool.submit(_board),
+                "activity": pool.submit(_activity),
+                "outputs": pool.submit(_outputs),
+                "usage": pool.submit(lambda: _usage(False)),
+            }
+            loaded = {name: future.result() for name, future in futures.items()}
+        data = overview.collect(loaded["services"], loaded["jobs"], loaded["errors"],
+                                loaded["board"], loaded["activity"], loaded["outputs"],
+                                loaded["usage"])
     except Exception as exc:
         return _respond({"error": redact(f"{type(exc).__name__}: {exc}")[:240]},
                         ["overview 聚合失败"])
@@ -251,6 +268,28 @@ def api_logs_recent(role: str = "all"):
     else:
         rows = _log_tail(role, 40)
     return _respond({"lines": rows})
+
+
+def _warm_caches() -> None:
+    """Fill the expensive collectors before the first browser hits them."""
+    if DEMO:
+        return
+    try:
+        with ThreadPoolExecutor(max_workers=7) as pool:
+            futures = [
+                pool.submit(_services), pool.submit(_jobs), pool.submit(_errors),
+                pool.submit(_board), pool.submit(_activity), pool.submit(_outputs),
+                pool.submit(_usage),
+            ]
+            for future in futures:
+                future.result()
+    except Exception:
+        pass
+
+
+@app.on_event("startup")
+def _startup_warmup() -> None:
+    threading.Thread(target=_warm_caches, name="warm-caches", daemon=True).start()
 
 
 if FRONTEND.is_dir():

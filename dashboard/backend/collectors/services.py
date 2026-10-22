@@ -4,12 +4,13 @@ from __future__ import annotations
 import re
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
 from util import (SERVICE_UNITS, TZ, UNIT_LABELS, human_bytes, iso, now, parse_iso,
                   redact, run, since_days)
 
-PROPS = "ActiveState,SubState,MainPID,NRestarts,MemoryCurrent,CPUUsageNSec,ActiveEnterTimestamp"
+PROPS = "Id,ActiveState,SubState,MainPID,NRestarts,MemoryCurrent,CPUUsageNSec,ActiveEnterTimestamp"
 RE_JOURNAL = re.compile(r"^(\S+)\s+(\S+)\s+([^:\s][^:]*):\s?(.*)$")
 
 
@@ -20,7 +21,7 @@ def _unit_blocks(stdout: str) -> dict[str, dict[str, str]]:
     for line in stdout.splitlines():
         if not line.strip():
             if current.get("Id"):
-                blocks[current["Id"]] = current
+                blocks[current["Id"].removesuffix(".service")] = current
             current = {}
             continue
         if "=" not in line:
@@ -28,7 +29,7 @@ def _unit_blocks(stdout: str) -> dict[str, dict[str, str]]:
         key, _, value = line.partition("=")
         current[key] = value
     if current.get("Id"):
-        blocks[current["Id"]] = current
+        blocks[current["Id"].removesuffix(".service")] = current
     return blocks
 
 
@@ -38,7 +39,7 @@ def _segments(unit: str, active: bool) -> tuple[list[dict], str]:
     start = end - timedelta(hours=24)
     rc, out, err = run(
         ["journalctl", "-u", unit, "--since", start.strftime("%Y-%m-%d %H:%M:%S"),
-         "--no-pager", "-o", "short-iso"], timeout=8)
+         "--no-pager", "-o", "short-iso"], timeout=6)
     events: list[tuple[datetime, bool]] = []
     if rc == 0:
         for line in out.splitlines():
@@ -117,6 +118,13 @@ def collect() -> dict:
 
     units = []
     online = 0
+    current_states = {
+        unit: (blocks.get(unit, {}).get("ActiveState", "unknown") == "active")
+        for unit in SERVICE_UNITS
+    }
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        segments_map = dict(zip(SERVICE_UNITS, pool.map(
+            lambda unit: _segments(unit, current_states[unit]), SERVICE_UNITS)))
     for unit in SERVICE_UNITS:
         label, role = UNIT_LABELS[unit]
         block = blocks.get(unit, {})
@@ -132,7 +140,9 @@ def collect() -> dict:
         pid = int(block["MainPID"]) if block.get("MainPID", "").isdigit() else None
         entered = _parse_systemd_ts(block.get("ActiveEnterTimestamp"))
         uptime_s = (now() - entered).total_seconds() if entered and active == "active" else None
-        segments, last_event = _segments(unit, active == "active")
+        segments, last_event = segments_map.get(unit, ([], "—"))
+        if active == "active" and entered:
+            last_event = f"{entered.strftime('%H:%M')} 启动"
         units.append({
             "unit": unit,
             "label": label,

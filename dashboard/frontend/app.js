@@ -122,7 +122,7 @@
   /* ------------------------------------------------------------- fetching */
   async function fetchJSON(url) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 9000);
+    const timer = setTimeout(() => controller.abort(), 15000);
     try {
       const res = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
