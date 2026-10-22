@@ -1,8 +1,10 @@
 # Hermes 可视化监控面板 — 设计与实施计划
 
-> 状态：**待开发**（2026-10-22 立项；同日托管/访问方案定稿：Cloudflare Tunnel，见 §5。计划在独立会话执行）
+> 状态：**M1/M2 代码完成，M3 部分完成**（2026-10-22 立项并同日落代码；托管/访问方案定稿：Cloudflare Tunnel，见 §5）
 > 目标文件：`dashboard/`（新增），部署脚本 `server/dashboard-deploy.sh`
 > 本文档是执行依据：模块清单、数据源、接口契约、分期任务、验收标准都在这里。
+> 实现说明见 `dashboard/README.md`；本机演示：`HERMES_DASHBOARD_DEMO=1`。上线 systemd 与
+> Cloudflare DNS / Access 尚未执行，需按 §7 约窗口期。
 
 ---
 
@@ -237,28 +239,28 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
 ## 7. 分期任务
 
 ### M1 — 可用的看家面板
-- [ ] 定接口契约，起 FastAPI 骨架 + 统一响应格式
-- [ ] `services` 采集器（systemd + 端口 + uptime 条带）
-- [ ] `jobs` 采集器（hermes cron + crontab 解析）
-- [ ] `errors` 采集器（groups.json + approvals）
-- [ ] `overview` 聚合
-- [ ] 前端：角色卡 + 服务健康 + 任务看板 + 错误区
-- [ ] `dashboard-deploy.sh` + systemd，绑定 127.0.0.1
+- [x] 定接口契约，起 FastAPI 骨架 + 统一响应格式
+- [x] `services` 采集器（systemd + 端口 + uptime 条带）
+- [x] `jobs` 采集器（hermes cron + crontab 解析）
+- [x] `errors` 采集器（groups.json + approvals）
+- [x] `overview` 聚合
+- [x] 前端：角色卡 + 服务健康 + 任务看板 + 错误区
+- [x] `dashboard-deploy.sh` + systemd，绑定 127.0.0.1（脚本已就绪，待服务器执行）
 - [ ] cloudflared 部署：systemd 服务 + ingress → `localhost:8787`，`hermes.joeli.site` Tunnel hostname + Access policy（前置：DNS zone 迁入 Cloudflare，见 §5；动手前与老板约窗口期）
-- [ ] 端到端验证：手动停 `hermes-biubiu`，页面 30s 内变红
+- [ ] 端到端验证：手动停 `hermes-biubiu`，页面 30s 内变红（需上线后执行）
 
 ### M2 — 特色模块
-- [ ] `activity`（state.db 只读 + 7d 热力图）
-- [ ] `board`（PLAN/STATUS 解析 + 逾期高亮）
-- [ ] `outputs`（五类哨兵产出墙）
-- [ ] `events`（重启 / cron 失败 / 错误高峰 / 审批合并）
-- [ ] 前端补齐对应区块
+- [x] `activity`（state.db 只读 + 7d 热力图）
+- [x] `board`（PLAN/STATUS 解析 + 逾期高亮）
+- [x] `outputs`（五类哨兵产出墙）
+- [x] `events`（重启 / cron 失败 / 错误高峰 / 审批合并）
+- [x] 前端补齐对应区块
 
 ### M3 — 成本与实时
-- [ ] `usage`（按 profile 的 token/成本，额度不可得时明确标注）
-- [ ] SSE 日志流 + 脱敏
+- [x] `usage`（按 profile 的 token/成本，额度不可得时明确标注）
+- [x] SSE 日志流 + 脱敏
 - [ ] 配置漂移与系统资源
-- [ ] 移动端适配（手机上也能看）
+- [x] 移动端适配（手机上也能看）
 
 ---
 
@@ -276,9 +278,9 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
 ## 9. 待定问题（开工前确认）
 
 1. **访问范围**——**已决（2026-10-22）**：私有，不公开。`hermes.joeli.site` + Cloudflare Access 认证（架构与迁移步骤见 §5）。若日后想公开展示，另做脱敏静态快照页，不复用本面板。
-2. **首版形态**：先用假数据做可点击原型定视觉，还是直接接真实接口？
-3. **额度数据**：OpenCode Go 是否有可调用的用量接口？没有就只做本地估算。
-4. **技术栈**：Vanilla 单页（最省）还是 React（后续扩展方便）。
+2. **首版形态**——**已决（2026-10-22）**：先做可点击原型并内置演示数据（`dashboard/frontend/demo-data.js`），再接真实接口；真实数据不可用时整块显示"数据不可用"。
+3. **额度数据**——**已确认**：OpenCode Go 有 key 鉴权的 `https://opencode.ai/zen/go/v1/usage`（三窗 remaining），`usage.py` 已接入；token/成本仍为本地估算，拿不到就标不可用。
+4. **技术栈**——**已决（2026-10-22）**：Vanilla 单页 + 手写 SVG，不引 UI 框架与图表库。
 
 ---
 

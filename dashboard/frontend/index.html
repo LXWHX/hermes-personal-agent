@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="robots" content="noindex,nofollow">
+<title>HERMES — 智能体监控台</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="demo-banner" class="demo-banner" hidden>
+  <span>DEMO</span>
+  <span>后端当前为演示数据（DEMO 模式或未连接）。接入服务器真实数据源后刷新即可读取实时状态。</span>
+</div>
+
+<header class="masthead">
+  <div class="rail">
+    <span class="rail__mark">HERMES<sup>®</sup></span>
+    <span class="rail__sep">/</span>
+    <span>内部值班台 · INTERNAL</span>
+    <span class="rail__spacer"></span>
+    <button type="button" class="text-btn" id="refresh-btn">刷新 REFRESH</button>
+    <span class="rail__sep">/</span>
+    <span id="clock" class="tabular">--:--:--</span>
+    <span class="rail__sep">/</span>
+    <span id="poll-state">AUTO 30S</span>
+  </div>
+
+  <div class="wordmark">
+    <h1>HERMES</h1>
+    <div class="wordmark__aside">
+      <p class="kicker">AGENT CONTROL ROOM</p>
+      <p class="cn">智能体监控台</p>
+      <p class="micro">只读 · READ ONLY<br>ASIA / SHANGHAI<br><span id="built-at">—</span></p>
+    </div>
+  </div>
+
+  <div class="status-bar" id="global-bar" data-state="loading">
+    <span class="status-bar__label" id="global-state">连接中</span>
+    <span class="status-bar__note" id="global-note">正在读取数据源</span>
+    <span class="status-bar__spacer"></span>
+    <span id="global-services">— / — 服务</span>
+    <span class="status-bar__sep">|</span>
+    <span id="global-api">API 8642 —</span>
+    <span class="status-bar__sep">|</span>
+    <span id="global-updated">—</span>
+  </div>
+
+  <nav class="index" id="index" aria-label="页面索引">
+    <a href="#roles" class="index__link is-active">01 角色</a>
+    <a href="#services" class="index__link">02 服务</a>
+    <a href="#activity" class="index__link">03 活跃度</a>
+    <a href="#jobs" class="index__link">04 任务</a>
+    <a href="#errors" class="index__link">05 错误</a>
+    <a href="#board" class="index__link">06 计划 / 状态</a>
+    <a href="#outputs" class="index__link">07 产出</a>
+    <a href="#usage" class="index__link">08 模型 / 额度</a>
+    <a href="#events" class="index__link">09 事件</a>
+    <a href="#logs" class="index__link">10 日志</a>
+    <span class="index__spacer"></span>
+    <span class="range" role="group" aria-label="时间范围">
+      <span class="range__label">RANGE</span>
+      <button type="button" class="range__btn" data-range="24h">24H</button>
+      <button type="button" class="range__btn is-active" data-range="7d">7D</button>
+    </span>
+  </nav>
+</header>
+
+<main>
+  <section class="section" id="roles" data-index="01">
+    <div class="section-head">
+      <span class="section-num">[01]</span>
+      <h2>角色 <span class="section-head__en">AGENTS</span></h2>
+      <p class="section-note">三个值班角色，三种职责。在线才跳。</p>
+      <span class="stamp" id="roles-stamp">—</span>
+    </div>
+    <div class="roles-grid" id="roles-grid" aria-live="polite">
+      <article class="role skeleton"><p class="micro">读取角色状态…</p></article>
+      <article class="role skeleton"><p class="micro">读取角色状态…</p></article>
+      <article class="role skeleton"><p class="micro">读取角色状态…</p></article>
+      <article class="system-card skeleton"><p class="micro">读取系统状态…</p></article>
+    </div>
+  </section>
+
+  <section class="section" id="services" data-index="02">
+    <div class="section-head">
+      <span class="section-num">[02]</span>
+      <h2>服务健康 <span class="section-head__en">SYSTEMD</span></h2>
+      <p class="section-note">6 个 systemd 单元 + 127.0.0.1:8642 探活。黑色连续条即在线。</p>
+      <span class="stamp" id="services-stamp">—</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table table--services">
+        <thead>
+          <tr>
+            <th scope="col">单元 / UNIT</th>
+            <th scope="col">状态</th>
+            <th scope="col" class="num">PID</th>
+            <th scope="col" class="num">重启</th>
+            <th scope="col" class="num">内存</th>
+            <th scope="col" class="num">CPU</th>
+            <th scope="col" class="uptime-col">24H UPTIME</th>
+            <th scope="col">最后事件</th>
+          </tr>
+        </thead>
+        <tbody id="services-body">
+          <tr><td colspan="8" class="empty">读取服务状态…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="services-foot">
+      <p class="micro" id="services-legend">■ 在线　□ 离线　* 数据不可用</p>
+      <p class="micro" id="services-restarts">重启分类：—</p>
+      <p class="micro" id="services-api">API：—</p>
+    </div>
+  </section>
+
+  <section class="section" id="activity" data-index="03">
+    <div class="section-head">
+      <span class="section-num">[03]</span>
+      <h2>活跃度 <span class="section-head__en">ACTIVITY</span></h2>
+      <p class="section-note">7 天 × 24 小时会话消息量。按角色分行，深色即密集。</p>
+      <span class="stamp" id="activity-stamp">—</span>
+    </div>
+    <div class="activity-meta">
+      <div class="activity-stat"><span class="micro">TOTAL</span><strong id="activity-total">—</strong><span class="micro">条消息 / 7 天</span></div>
+      <div class="activity-stat"><span class="micro">PEAK</span><strong id="activity-peak">—</strong><span class="micro" id="activity-peak-note">—</span></div>
+      <div class="heat-legend micro">
+        <span>少</span><i style="--a:.08"></i><i style="--a:.25"></i><i style="--a:.5"></i><i style="--a:1"></i><span>多</span>
+      </div>
+    </div>
+    <div id="heatmaps" class="heatmaps">
+      <p class="empty">读取热力图…</p>
+    </div>
+  </section>
+
+  <section class="section" id="jobs" data-index="04">
+    <div class="section-head">
+      <span class="section-num">[04]</span>
+      <h2>定时任务 <span class="section-head__en">SCHEDULE</span></h2>
+      <p class="section-note">24 小时时间轴。空心为下次，实心为上次；红点即失败。</p>
+      <span class="stamp" id="jobs-stamp">—</span>
+    </div>
+    <div class="job-timeline" id="job-timeline" aria-label="24 小时任务时间轴">
+      <p class="empty">读取任务…</p>
+    </div>
+    <div class="table-wrap">
+      <table class="table table--jobs">
+        <thead>
+          <tr>
+            <th scope="col">任务</th>
+            <th scope="col">归属</th>
+            <th scope="col">计划</th>
+            <th scope="col">上次</th>
+            <th scope="col">耗时</th>
+            <th scope="col">下次</th>
+            <th scope="col">结果</th>
+            <th scope="col">摘要</th>
+          </tr>
+        </thead>
+        <tbody id="jobs-body">
+          <tr><td colspan="8" class="empty">读取任务…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="micro" id="jobs-foot">—</p>
+  </section>
+
+  <section class="section" id="errors" data-index="05">
+    <div class="section-head">
+      <span class="section-num">[05]</span>
+      <h2>错误中枢 <span class="section-head__en">ERRORS</span></h2>
+      <p class="section-note">动态枚举当日 groups.json 的错误源。修复闭环真源为 approvals/。</p>
+      <span class="stamp" id="errors-stamp">—</span>
+    </div>
+
+    <div class="errors-grid">
+      <div class="errors-main">
+        <div class="error-summary">
+          <div class="error-stat">
+            <span class="micro">TODAY / 今日错误</span>
+            <strong id="errors-total">—</strong>
+            <span class="micro" id="errors-delta">—</span>
+          </div>
+          <div class="error-trend">
+            <span class="micro">7 DAY TREND</span>
+            <div id="error-spark" class="spark"></div>
+          </div>
+        </div>
+
+        <div class="approval-row" id="approval-counts">
+          <p class="empty">读取审批状态…</p>
+        </div>
+
+        <h3 class="subhead">错误源 / SOURCES <span class="micro" id="errors-source-count">—</span></h3>
+        <div class="source-list" id="source-list">
+          <p class="empty">读取错误源…</p>
+        </div>
+
+        <h3 class="subhead">修复议题 / APPROVALS</h3>
+        <div class="table-wrap">
+          <table class="table table--approvals">
+            <thead>
+              <tr><th scope="col">议题</th><th scope="col">状态</th><th scope="col">严重度</th><th scope="col" class="num">挂起</th><th scope="col">摘要</th></tr>
+            </thead>
+            <tbody id="approvals-body">
+              <tr><td colspan="5" class="empty">读取议题…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <aside class="errors-side">
+        <h3 class="subhead">最近错误流 / RECENT <span class="micro">点击展开原始行</span></h3>
+        <div class="error-stream" id="error-stream">
+          <p class="empty">读取错误流…</p>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="section" id="board" data-index="06">
+    <div class="section-head">
+      <span class="section-num">[06]</span>
+      <h2>计划与状态 <span class="section-head__en">PLAN / STATUS</span></h2>
+      <p class="section-note">PLAN.md 与 STATUS.md 的只读镜像。红色只给逾期与失败。</p>
+      <span class="stamp" id="board-stamp">—</span>
+    </div>
+    <div class="board-grid">
+      <div class="board-plan">
+        <h3 class="subhead">PLAN <span class="micro" id="plan-summary">—</span></h3>
+        <div id="plan-content"><p class="empty">读取计划板…</p></div>
+      </div>
+      <aside class="board-status">
+        <h3 class="subhead">STATUS</h3>
+        <div id="status-content"><p class="empty">读取状态板…</p></div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="section" id="outputs" data-index="07">
+    <div class="section-head">
+      <span class="section-num">[07]</span>
+      <h2>情报产出墙 <span class="section-head__en">OUTPUTS</span></h2>
+      <p class="section-note">最近一期。SILENT 与 FAIL 必须一眼分开——没发 ≠ 没跑。</p>
+      <span class="stamp" id="outputs-stamp">—</span>
+    </div>
+    <div class="outputs-grid" id="outputs-grid">
+      <p class="empty">读取产出…</p>
+    </div>
+  </section>
+
+  <section class="section" id="usage" data-index="08">
+    <div class="section-head">
+      <span class="section-num">[08]</span>
+      <h2>模型与额度 <span class="section-head__en">USAGE</span></h2>
+      <p class="section-note">三条独立 key 的余量取自 OpenCode Go usage 端点；token 为本地估算。</p>
+      <span class="stamp" id="usage-stamp">—</span>
+    </div>
+    <div class="usage-grid">
+      <div class="quota-panel">
+        <h3 class="subhead">额度 / QUOTA</h3>
+        <div id="quota-list"><p class="empty">读取额度…</p></div>
+      </div>
+      <div class="usage-panel">
+        <h3 class="subhead">用量 / BY PROFILE <span class="micro" id="usage-note">—</span></h3>
+        <div class="table-wrap">
+          <table class="table table--usage">
+            <thead>
+              <tr><th scope="col">Profile</th><th scope="col" class="num">请求</th><th scope="col" class="num">失败</th><th scope="col" class="num">Tokens in</th><th scope="col" class="num">Tokens out</th><th scope="col" class="num">p50</th><th scope="col" class="num">p95</th><th scope="col" class="num">成本</th></tr>
+            </thead>
+            <tbody id="usage-body">
+              <tr><td colspan="8" class="empty">读取用量…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="cost-trend">
+          <span class="micro">今日估算 <strong id="today-cost">—</strong></span>
+          <div id="cost-spark" class="spark spark--small"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="events" data-index="09">
+    <div class="section-head">
+      <span class="section-num">[09]</span>
+      <h2>事件时间线 <span class="section-head__en">EVENTS</span></h2>
+      <p class="section-note">重启、任务失败、错误高峰、审批合并成一条流。静音只写入本机浏览器。</p>
+      <span class="stamp" id="events-stamp">—</span>
+    </div>
+    <div class="events" id="events-list">
+      <p class="empty">读取事件…</p>
+    </div>
+  </section>
+
+  <section class="section" id="logs" data-index="10">
+    <div class="section-head">
+      <span class="section-num">[10]</span>
+      <h2>实时日志 <span class="section-head__en">TAIL</span></h2>
+      <p class="section-note">SSE 流，脱敏后只显示行摘要。切换角色重连。</p>
+      <span class="stamp" id="logs-stamp">连接中</span>
+    </div>
+    <div class="log-controls" role="group" aria-label="日志角色过滤">
+      <button type="button" class="log-filter is-active" data-log-role="hanbao">憨包</button>
+      <button type="button" class="log-filter" data-log-role="hamburger">汉堡</button>
+      <button type="button" class="log-filter" data-log-role="biubiu">biubiu</button>
+      <button type="button" class="log-filter" data-log-role="system">系统</button>
+      <span class="log-status micro" id="log-status">等待连接</span>
+    </div>
+    <pre class="log-console" id="log-console" aria-live="off"><span class="log-empty">等待日志流…</span></pre>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="footer__col">
+    <p class="kicker">HERMES CONTROL ROOM</p>
+    <p class="micro">只读面板 · 不触发 cron · 不修改 board<br>绑定 127.0.0.1:8787 · Cloudflare Tunnel 出站</p>
+  </div>
+  <div class="footer__col">
+    <p class="kicker">DATA POLICY</p>
+    <p class="micro">不展示 API key / chat_id / 服务器 IP / 房间号<br>日志行服务端脱敏 · 浏览器不直连数据源</p>
+  </div>
+  <div class="footer__col footer__col--right">
+    <p class="footer__word">READ<br>ONLY</p>
+  </div>
+</footer>
+
+<noscript><div class="noscript">此面板需要 JavaScript。</div></noscript>
+<script src="demo-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
