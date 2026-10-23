@@ -461,7 +461,15 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
   中间件在路由前拦截，`/api/logs/stream` 不会创建任何生成器/线程。
 - **前端**：只探活一次 `/api/overview` 拿到 `viewer`，guest 只拉 overview/jobs/activity/usage
   四个接口（60s 轮询），不建立 SSE；`demo-data.js` 改为离线时懒加载，首屏不再下载 103 KB。
-- **验收结果**：见 §13.1 的 guest 断言；完整矩阵在 `dashboard/README.md`。
+- **验收结果（服务器侧，2026-10-23 17:12）**：guest 403 矩阵 9/9（含 `/api/logs/stream`）；
+  guest 200 仅 `overview/jobs/activity/usage`；`/health` 带 `viewer=guest`；`overview` 的
+  `online_services/total_services/api_ok/overdue_tasks/open_approvals` 全 null，三个角色
+  `metrics=[]`、`uptime=null`；`jobs` 26/26 `summary=null`；owner 侧 `viewer=owner`、
+  6/6 服务、角色 metrics 3 条；guest 响应体中搜不到 `hermes-gateway` / `PLAN.md` / `STATUS.md`。
+  `bash server/dashboard-deploy.sh --check` 全绿。
+- **待人工**：Tunnel Route `hamburger.joeli.site → HTTP 127.0.0.1:8787` 与 Access
+  `Bypass + Everyone` 需在 Zero Trust 面板完成（脚本不代改 DNS/Access）；
+  完成后 `Resolve-DnsName hamburger.joeli.site` 应返回 Cloudflare 代理 IP。
 
 
 ---
