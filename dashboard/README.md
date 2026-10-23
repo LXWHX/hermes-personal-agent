@@ -68,13 +68,17 @@ systemd `cloudflared` active/enabled，4 条 QUIC 连接挂东京边缘。
 | 域名 | 访问策略 | 视图 |
 |---|---|---|
 | `hermes.joeli.site` | Cloudflare Access（邮箱 OTP，24h） | 全量 11 块 |
-| `hamburger.joeli.site` | Access `Bypass + Everyone` | 01 / 03 / 04 / 08 可见；其余 7 块 mosaic |
+| `hamburger.joeli.site` | Access `Bypass + Everyone` | 01 / 02 / 03 / 04 / 08 / 11；其余整块移除 |
 
-- 可见：角色卡、活跃度、定时任务（摘要列打码 `▓▓▓`）、模型与额度。
-- 隐藏（403 + 马赛克）：`/api/services` `/api/errors` `/api/board` `/api/outputs`
-  `/api/drift` `/api/system` `/api/events` `/api/logs/recent` `/api/logs/stream`。
-- `overview` 的派生字段（服务数、API 探活、待批、逾期、角色 metrics、uptime）在
-  guest 下统一置空，避免从 01 绕过马赛克。
+- 可见：角色卡、服务健康、活跃度、定时任务（**只保留 24h 时间轴**，明细表 owner-only）、
+  模型与额度、系统与漂移。
+- 移除（不是马赛克）：05 错误中枢、06 计划与状态、07 情报产出、09 事件、10 日志；
+  对应导航项一起隐藏。
+- 403：`/api/errors` `/api/board` `/api/outputs` `/api/events`
+  `/api/logs/recent` `/api/logs/stream`。
+- `overview` 中来自隐藏模块的字段仍置空：`overdue_tasks`（06）、`open_approvals`（05）、
+  `roles[].metrics`（05/06/07）；服务数、API 探活、uptime 随 02 保留。
+- `jobs.summary` 服务端置空（guest 不显示明细表，仍做兜底）。
 - 配置：systemd `Environment=HERMES_DASHBOARD_GUEST_HOSTS=hamburger.joeli.site`
   （逗号分隔可写多个；**留空 = 关闭访客视图**，所有 Host 都按 owner 处理）。
 - 临时关闭访客域名：删掉 Tunnel 的 Route，或把该 Access 应用改回 OTP；服务端无需改动。

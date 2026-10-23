@@ -446,30 +446,33 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
   `HERMES_DASHBOARD_FORCE_VIEWER=guest` 看样式。
 - **安全前提**：8787 只绑 loopback 且只有 Cloudflare Tunnel 能进，`Host` 由边缘决定，客户端无法伪造成
   owner 域名。**若以后在前面加反向代理，必须改用 `Cf-Access-Authenticated-User-Email` 或验 JWT。**
-- **可见**：01 角色、03 活跃度、04 定时任务、08 模型与额度。隐藏块（02/05/06/07/09/10/11）
-  在页面上显示为黑白 mosaic，导航项锁定为 `NN ▓▓`。
+- **可见**：01 角色、02 服务健康、03 活跃度、04 定时任务、08 模型与额度、11 系统与漂移。
+  其中 04 只保留 24h 时间轴，明细表与 footer 仅在 owner 视图显示。05/06/07/09/10
+  整块从访客页面移除（DOM 仍存在以复用同一份静态文件，guest 下 CSS 隐藏、导航项隐藏），
+  不再使用黑白图片马赛克；04 摘要等仍需要遮挡的字段用字符 `▓▓▓` 表示。
 - **字段级裁剪**（服务端完成，前端不 blur 真实数据）：
-  - `/api/overview`：`online_services/total_services/api_ok/overdue_tasks/open_approvals → null`；
-    `note` 固定「访客视图 · 部分模块隐藏」；`roles[].metrics → []`、`uptime_seconds → null`；
-    `global.state` 只看 `roles` 是否有 `offline`（`services` 仍内部读取用于重算角色状态，但不返回明细）。
-  - `/api/jobs`：保留名称/归属/计划/上次/耗时/下次/结果，`summary → null`（前端渲染 `▓▓▓`）。
-  - `/api/activity`、`/api/usage`：原样。
+  - `/api/overview`：`overdue_tasks/open_approvals → null`（分别来自 06/05）；
+    `note` 固定「访客视图 · 部分模块隐藏」；`roles[].metrics → []`（指标混有 05/06/07）；
+    `online_services/total_services/api_ok` 与 `uptime_seconds` 保留（02 可见）；
+    `global.state` 只看 `roles` 是否有 `offline`。
+  - `/api/jobs`：`summary → null`（明细表 guest 不显示，服务端仍兜底裁剪）。
+  - `/api/services`、`/api/activity`、`/api/usage`、`/api/drift`、`/api/system`：原样。
   - `/health`：guest 时带 `"viewer": "guest"`。
-- **403 端点**：`/api/services`、`/api/errors`、`/api/board`、`/api/outputs`、`/api/drift`、
-  `/api/system`、`/api/events`、`/api/logs/recent`、`/api/logs/stream`；统一返回
+- **403 端点**：`/api/errors`、`/api/board`、`/api/outputs`、`/api/events`、
+  `/api/logs/recent`、`/api/logs/stream`；统一返回
   `{"ok":false,"hidden":true,"viewer":"guest","error":"hidden_in_guest_view"}`。
   中间件在路由前拦截，`/api/logs/stream` 不会创建任何生成器/线程。
-- **前端**：只探活一次 `/api/overview` 拿到 `viewer`，guest 只拉 overview/jobs/activity/usage
-  四个接口（60s 轮询），不建立 SSE；`demo-data.js` 改为离线时懒加载，首屏不再下载 103 KB。
-- **验收结果（服务器侧，2026-10-23 17:12）**：guest 403 矩阵 9/9（含 `/api/logs/stream`）；
-  guest 200 仅 `overview/jobs/activity/usage`；`/health` 带 `viewer=guest`；`overview` 的
-  `online_services/total_services/api_ok/overdue_tasks/open_approvals` 全 null，三个角色
-  `metrics=[]`、`uptime=null`；`jobs` 26/26 `summary=null`；owner 侧 `viewer=owner`、
-  6/6 服务、角色 metrics 3 条；guest 响应体中搜不到 `hermes-gateway` / `PLAN.md` / `STATUS.md`。
-  `bash server/dashboard-deploy.sh --check` 全绿。
-- **待人工**：Tunnel Route `hamburger.joeli.site → HTTP 127.0.0.1:8787` 与 Access
-  `Bypass + Everyone` 需在 Zero Trust 面板完成（脚本不代改 DNS/Access）；
-  完成后 `Resolve-DnsName hamburger.joeli.site` 应返回 Cloudflare 代理 IP。
+- **前端**：只探活一次 `/api/overview` 拿到 `viewer`，guest 拉
+  overview/services/jobs/activity/usage/drift/system 七个接口（60s 轮询），不建立 SSE；
+  `demo-data.js` 改为离线时懒加载，首屏不再下载 103 KB。
+- **验收结果（服务器侧，2026-10-23）**：guest 403 矩阵 6/6（含 `/api/logs/stream`）；
+  guest 200：overview/services/jobs/activity/usage/drift/system；`/health` 带 `viewer=guest`；
+  `overview` 的 `overdue_tasks/open_approvals` 为 null、角色 `metrics=[]`，服务数与 uptime 保留；
+  `jobs` 的 `summary` 全为 null；owner 侧全量不变。`bash server/dashboard-deploy.sh --check` 全绿。
+- **上线状态**：`hamburger.joeli.site` 已通过 Tunnel Route（HTTP `127.0.0.1:8787`）+
+  Access `Bypass + Everyone` 公开，DNS CNAME 指向
+  `cb91dc08-9649-4d44-b80e-a70c6e4257bf.cfargotunnel.com`（橙云）；`hermes.joeli.site`
+  仍 302 到 Access 登录页。
 
 
 ---

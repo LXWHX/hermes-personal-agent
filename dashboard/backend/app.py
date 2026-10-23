@@ -58,9 +58,8 @@ app.add_middleware(_NoCacheStatic)
 # Modules a guest must never reach.  /api/logs/stream is added separately so the
 # gate answers 403 *before* any StreamingResponse/generator is created.
 GUEST_BLOCKED = {
-    "/api/services", "/api/errors", "/api/board", "/api/outputs",
-    "/api/drift", "/api/system", "/api/events", "/api/logs/recent",
-    "/api/logs/stream",
+    "/api/errors", "/api/board", "/api/outputs",
+    "/api/events", "/api/logs/recent", "/api/logs/stream",
 }
 GUEST_HIDDEN_BODY = {"ok": False, "hidden": True, "viewer": "guest",
                      "error": "hidden_in_guest_view"}
@@ -103,22 +102,20 @@ GUEST_NOTE = "访客视图 · 部分模块隐藏"
 
 
 def _guest_overview(data: dict) -> dict:
-    """Strip every field derived from a hidden module (02/05/06/07/09/10/11).
+    """Strip every field derived from a hidden module (05/06/07/09/10).
 
-    Runs on the owner-shaped aggregation so the visible cards keep their
-    structure; only the values that leak hidden modules are nulled.
+    02 services and 11 system/drift are visible for guests, so service
+    counts/API/uptime stay.
     """
     data = copy.deepcopy(data)
     g = data.setdefault("global", {})
-    for key in ("online_services", "total_services", "api_ok", "overdue_tasks",
-                "open_approvals"):
+    for key in ("overdue_tasks", "open_approvals"):
         g[key] = None
     g["note"] = GUEST_NOTE
     g.pop("label", None)
     roles = data.get("roles") or []
     for role in roles:
         role["metrics"] = []
-        role["uptime_seconds"] = None
     g["state"] = "degraded" if any(r.get("state") == "offline" for r in roles) else "ok"
     return data
 

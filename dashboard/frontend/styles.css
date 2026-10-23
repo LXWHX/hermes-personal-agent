@@ -1439,49 +1439,24 @@ html.cursor-on, html.cursor-on * { cursor: none !important; }
 }
 
 /* ---------------------------------------------------------------- guest view
-   Server-side cropping is the boundary; these rules only mirror it: hidden
-   modules become monochrome mosaics, and nothing is fetched to be blurred. */
-.mosaic {
-  display: none;
-  position: relative;
-  border: 1px solid var(--line-strong);
-  background: var(--paper);
-  min-height: 180px;
-}
-body.is-guest .mosaic { display: block; }
-body.is-guest .guest-hide { display: none !important; }
+   Server-side cropping is the boundary.  Guest keeps 01/02/03/04/08 and the
+   other sections are removed from the page entirely — no image mosaic. */
+body.is-guest #errors,
+body.is-guest #board,
+body.is-guest #outputs,
+body.is-guest #events,
+body.is-guest #logs { display: none !important; }
+body.is-guest .guest-remove { display: none !important; }
 
-.mosaic__grid {
-  height: 180px;
-  background:
-    repeating-linear-gradient(90deg, var(--ink) 0 12px, var(--paper) 12px 24px),
-    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.85) 0 12px, transparent 12px 24px);
-  background-blend-mode: multiply;
-  background-size: 24px 24px;
-}
-.mosaic__label {
-  position: absolute;
-  inset: auto 0 0 0;
-  margin: 0;
-  padding: 8px 12px;
-  font: 600 11px/1 "Helvetica Neue", Helvetica, Arial, sans-serif;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  background: var(--ink);
-  color: var(--ground);
-}
+/* 04 keeps only the timeline chart; the detail table stays owner-only. */
+body.is-guest #jobs .table-wrap,
+body.is-guest #jobs-foot { display: none !important; }
 
-.is-locked { opacity: 0.45; pointer-events: none; }
+/* character-level redaction (jobs summary etc.) */
 .redacted {
   display: inline-block;
   padding: 0 6px;
   background: var(--ink);
   color: var(--ink);
   user-select: none;
-}
-
-@media (max-width: 640px) {
-  .mosaic,
-  .mosaic__grid { min-height: 140px; }
-  .mosaic__grid { height: 140px; }
 }

@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>HERMES — 智能体监控台</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="styles.css?v=20261023c">
+<link rel="stylesheet" href="styles.css?v=20261023d">
 </head>
 <body>
 <div id="demo-banner" class="demo-banner" hidden>
@@ -94,11 +94,6 @@
       <p class="section-note">6 个 systemd 单元 + 127.0.0.1:8642 探活。黑色连续条即在线。</p>
       <span class="stamp" id="services-stamp">—</span>
     </div>
-    <div class="mosaic" data-guest-only aria-label="访客不可见">
-      <div class="mosaic__grid" aria-hidden="true"></div>
-      <p class="mosaic__label">VISITOR / HIDDEN</p>
-    </div>
-    <div class="guest-hide">
     <div class="table-wrap">
       <table class="table table--services">
         <thead>
@@ -122,7 +117,6 @@
       <p class="micro" id="services-legend">■ 在线　□ 离线　* 数据不可用</p>
       <p class="micro" id="services-restarts">重启分类：—</p>
       <p class="micro" id="services-api">API：—</p>
-    </div>
     </div>
   </section>
 
@@ -185,11 +179,6 @@
       <span class="stamp" id="errors-stamp">—</span>
     </div>
 
-    <div class="mosaic" data-guest-only aria-label="访客不可见">
-      <div class="mosaic__grid" aria-hidden="true"></div>
-      <p class="mosaic__label">VISITOR / HIDDEN</p>
-    </div>
-    <div class="guest-hide">
     <div class="errors-grid">
       <div class="errors-main">
         <div class="error-summary">
@@ -233,7 +222,6 @@
         </div>
       </aside>
     </div>
-    </div>
   </section>
 
   <section class="section" id="board" data-index="06">
@@ -243,11 +231,6 @@
       <p class="section-note">PLAN.md 与 STATUS.md 的只读镜像。红色只给逾期与失败。</p>
       <span class="stamp" id="board-stamp">—</span>
     </div>
-    <div class="mosaic" data-guest-only aria-label="访客不可见">
-      <div class="mosaic__grid" aria-hidden="true"></div>
-      <p class="mosaic__label">VISITOR / HIDDEN</p>
-    </div>
-    <div class="guest-hide">
     <div class="board-grid">
       <div class="board-plan">
         <h3 class="subhead">PLAN <span class="micro" id="plan-summary">—</span></h3>
@@ -258,7 +241,6 @@
         <div id="status-content"><p class="empty">读取状态板…</p></div>
       </aside>
     </div>
-    </div>
   </section>
 
   <section class="section" id="outputs" data-index="07">
@@ -268,14 +250,8 @@
       <p class="section-note">最近一期。SILENT 与 FAIL 必须一眼分开——没发 ≠ 没跑。</p>
       <span class="stamp" id="outputs-stamp">—</span>
     </div>
-    <div class="mosaic" data-guest-only aria-label="访客不可见">
-      <div class="mosaic__grid" aria-hidden="true"></div>
-      <p class="mosaic__label">VISITOR / HIDDEN</p>
-    </div>
-    <div class="guest-hide">
     <div class="outputs-grid" id="outputs-grid">
       <p class="empty">读取产出…</p>
-    </div>
     </div>
   </section>
 
@@ -318,14 +294,8 @@
       <p class="section-note">重启、任务失败、错误高峰、审批合并成一条流。静音只写入本机浏览器。</p>
       <span class="stamp" id="events-stamp">—</span>
     </div>
-    <div class="mosaic" data-guest-only aria-label="访客不可见">
-      <div class="mosaic__grid" aria-hidden="true"></div>
-      <p class="mosaic__label">VISITOR / HIDDEN</p>
-    </div>
-    <div class="guest-hide">
     <div class="events" id="events-list">
       <p class="empty">读取事件…</p>
-    </div>
     </div>
   </section>
 
@@ -336,11 +306,6 @@
       <p class="section-note">SSE 流，脱敏后只显示行摘要。切换角色重连。</p>
       <span class="stamp" id="logs-stamp">连接中</span>
     </div>
-    <div class="mosaic" data-guest-only aria-label="访客不可见">
-      <div class="mosaic__grid" aria-hidden="true"></div>
-      <p class="mosaic__label">VISITOR / HIDDEN</p>
-    </div>
-    <div class="guest-hide">
     <div class="log-controls" role="group" aria-label="日志角色过滤">
       <button type="button" class="log-filter is-active" data-log-role="hanbao">憨包</button>
       <button type="button" class="log-filter" data-log-role="hamburger">汉堡</button>
@@ -349,7 +314,6 @@
       <span class="log-status micro" id="log-status">等待连接</span>
     </div>
     <pre class="log-console" id="log-console" aria-live="off"><span class="log-empty">等待日志流…</span></pre>
-    </div>
   </section>
 
   <section class="section" id="system" data-index="11">
@@ -359,11 +323,6 @@
       <p class="section-note">主机资源、内存加固旋钮、出站可达；线上副本与仓库检出的一致性。</p>
       <span class="stamp" id="system-stamp">—</span>
     </div>
-    <div class="mosaic" data-guest-only aria-label="访客不可见">
-      <div class="mosaic__grid" aria-hidden="true"></div>
-      <p class="mosaic__label">VISITOR / HIDDEN</p>
-    </div>
-    <div class="guest-hide">
     <div class="ops-grid">
       <div class="ops-host">
         <h3 class="subhead">主机 / HOST</h3>
@@ -396,7 +355,6 @@
         </div>
         <p class="micro" id="drift-foot">—</p>
       </div>
-    </div>
     </div>
   </section>
 </main>
@@ -437,6 +395,6 @@
   <span class="reticle__tag">X ---- · Y ----</span>
 </div>
 
-<script src="app.js?v=20261023c"></script>
+<script src="app.js?v=20261023d"></script>
 </body>
 </html>
