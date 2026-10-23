@@ -7,6 +7,7 @@ Demo (no server data required):
 """
 from __future__ import annotations
 
+import copy
 import json
 import os
 import threading
@@ -23,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 import demo
 from cache import CACHE
 from collectors import activity, board, drift, errors, events, jobs, outputs, overview, services, system, usage
-from util import DEMO, ROOT, envelope, iso, redact, tail
+from util import DEMO, ROOT, envelope, iso, redact, tail, viewer_for
 
 FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
 TTL = float(os.environ.get("HERMES_DASHBOARD_TTL", "20"))
@@ -54,6 +55,29 @@ class _NoCacheStatic:
 
 app.add_middleware(_NoCacheStatic)
 
+# Modules a guest must never reach.  /api/logs/stream is added separately so the
+# gate answers 403 *before* any StreamingResponse/generator is created.
+GUEST_BLOCKED = {
+    "/api/services", "/api/errors", "/api/board", "/api/outputs",
+    "/api/drift", "/api/system", "/api/events", "/api/logs/recent",
+    "/api/logs/stream",
+}
+GUEST_HIDDEN_BODY = {"ok": False, "hidden": True, "viewer": "guest",
+                     "error": "hidden_in_guest_view"}
+
+
+@app.middleware("http")
+async def _guest_gate(request: Request, call_next):
+    viewer = viewer_for(request)
+    request.state.viewer = viewer
+    if viewer == "guest" and request.url.path in GUEST_BLOCKED:
+        return JSONResponse(GUEST_HIDDEN_BODY, status_code=403)
+    return await call_next(request)
+
+
+def _viewer(request: Request) -> str:
+    return getattr(request.state, "viewer", "owner")
+
 
 def _load(name: str, loader, *args, **kwargs) -> dict:
     if DEMO:
@@ -65,13 +89,46 @@ def _load(name: str, loader, *args, **kwargs) -> dict:
                 "_warnings": [f"{name} 采集失败"]}
 
 
-def _respond(data: dict, warnings: list[str] | None = None) -> JSONResponse:
+def _respond(data: dict, warnings: list[str] | None = None,
+             viewer: str = "owner") -> JSONResponse:
     payload = dict(data or {})
     extra = payload.pop("_warnings", []) or []
     all_warnings = list(warnings or []) + list(extra)
     if DEMO:
         all_warnings.insert(0, "演示数据 · 后端未连接真实数据源")
-    return JSONResponse(jsonable_encoder(envelope(payload, all_warnings)))
+    return JSONResponse(jsonable_encoder(envelope(payload, all_warnings, viewer)))
+
+
+GUEST_NOTE = "访客视图 · 部分模块隐藏"
+
+
+def _guest_overview(data: dict) -> dict:
+    """Strip every field derived from a hidden module (02/05/06/07/09/10/11).
+
+    Runs on the owner-shaped aggregation so the visible cards keep their
+    structure; only the values that leak hidden modules are nulled.
+    """
+    data = copy.deepcopy(data)
+    g = data.setdefault("global", {})
+    for key in ("online_services", "total_services", "api_ok", "overdue_tasks",
+                "open_approvals"):
+        g[key] = None
+    g["note"] = GUEST_NOTE
+    g.pop("label", None)
+    roles = data.get("roles") or []
+    for role in roles:
+        role["metrics"] = []
+        role["uptime_seconds"] = None
+    g["state"] = "degraded" if any(r.get("state") == "offline" for r in roles) else "ok"
+    return data
+
+
+def _guest_jobs(data: dict) -> dict:
+    """04 摘要列在访客版一律打码（服务端置空，前端再兜一层）。"""
+    data = copy.deepcopy(data)
+    for job in data.get("jobs", []):
+        job["summary"] = None
+    return data
 
 
 def _services() -> dict:
@@ -137,47 +194,65 @@ def _system() -> dict:
 
 
 @app.get("/health")
-def health() -> dict:
-    return {"ok": True, "service": "hermes-dashboard", "demo": DEMO, "generated_at": iso()}
+def health(request: Request) -> dict:
+    viewer = _viewer(request)
+    payload = {"ok": True, "service": "hermes-dashboard", "demo": DEMO, "generated_at": iso()}
+    if viewer == "guest":
+        payload["viewer"] = "guest"
+    return payload
 
 
 @app.get("/api/overview")
-def api_overview():
+def api_overview(request: Request):
+    viewer = _viewer(request)
     if DEMO:
-        return _respond(demo.snapshot()["overview"])
+        data = demo.snapshot()["overview"]
+        return _respond(_guest_overview(data) if viewer == "guest" else data, viewer=viewer)
     try:
         with ThreadPoolExecutor(max_workers=7) as pool:
             futures = {
+                # 01 角色卡的状态由 systemd 活跃度推导；services 只用于重算，
+                # 裁剪后其中的明细（02）不会出现在响应里。
                 "services": pool.submit(_services),
                 "jobs": pool.submit(_jobs),
-                "errors": pool.submit(_errors),
-                "board": pool.submit(_board),
                 "activity": pool.submit(_activity),
-                "outputs": pool.submit(_outputs),
                 "usage": pool.submit(lambda: _usage(False)),
             }
+            if viewer != "guest":
+                futures.update({
+                    "errors": pool.submit(_errors),
+                    "board": pool.submit(_board),
+                    "outputs": pool.submit(_outputs),
+                })
             loaded = {name: future.result() for name, future in futures.items()}
-        data = overview.collect(loaded["services"], loaded["jobs"], loaded["errors"],
-                                loaded["board"], loaded["activity"], loaded["outputs"],
-                                loaded["usage"])
+        data = overview.collect(loaded.get("services", {}), loaded.get("jobs", {}),
+                                loaded.get("errors", {}), loaded.get("board", {}),
+                                loaded.get("activity", {}), loaded.get("outputs", {}),
+                                loaded.get("usage", {}))
+        if viewer == "guest":
+            data = _guest_overview(data)
     except Exception as exc:
         return _respond({"error": redact(f"{type(exc).__name__}: {exc}")[:240]},
-                        ["overview 聚合失败"])
-    return _respond(data)
+                        ["overview 聚合失败"], viewer=viewer)
+    return _respond(data, viewer=viewer)
 
 
 @app.get("/api/services")
-def api_services():
-    return _respond(_services())
+def api_services(request: Request):
+    return _respond(_services(), viewer=_viewer(request))
 
 
 @app.get("/api/jobs")
-def api_jobs():
-    return _respond(_jobs())
+def api_jobs(request: Request):
+    viewer = _viewer(request)
+    data = _jobs()
+    if viewer == "guest":
+        data = _guest_jobs(data)
+    return _respond(data, viewer=viewer)
 
 
 @app.get("/api/activity")
-def api_activity(range: str = Query("7d", pattern="^(24h|7d)$")):
+def api_activity(request: Request, range: str = Query("7d", pattern="^(24h|7d)$")):
     data = _activity(range)
     data["range"] = range
     if DEMO and range == "24h":
@@ -185,45 +260,46 @@ def api_activity(range: str = Query("7d", pattern="^(24h|7d)$")):
         cells = [c for c in data.get("cells", []) if c.get("date") == today]
         data["cells"] = cells
         data["total"] = sum(c.get("count", 0) for c in cells)
-    return _respond(data)
+    return _respond(data, viewer=_viewer(request))
 
 
 @app.get("/api/errors")
-def api_errors():
-    return _respond(_errors())
+def api_errors(request: Request):
+    return _respond(_errors(), viewer=_viewer(request))
 
 
 @app.get("/api/board")
-def api_board():
-    return _respond(_board())
+def api_board(request: Request):
+    return _respond(_board(), viewer=_viewer(request))
 
 
 @app.get("/api/outputs")
-def api_outputs():
-    return _respond(_outputs())
+def api_outputs(request: Request):
+    return _respond(_outputs(), viewer=_viewer(request))
 
 
 @app.get("/api/usage")
-def api_usage():
-    return _respond(_usage())
+def api_usage(request: Request):
+    return _respond(_usage(), viewer=_viewer(request))
 
 
 @app.get("/api/drift")
-def api_drift():
-    return _respond(_drift())
+def api_drift(request: Request):
+    return _respond(_drift(), viewer=_viewer(request))
 
 
 @app.get("/api/system")
-def api_system():
-    return _respond(_system())
+def api_system(request: Request):
+    return _respond(_system(), viewer=_viewer(request))
 
 
 @app.get("/api/events")
-def api_events():
+def api_events(request: Request):
+    viewer = _viewer(request)
     if DEMO:
-        return _respond(demo.snapshot()["events"])
+        return _respond(demo.snapshot()["events"], viewer=viewer)
     data = events.collect(_services(), _jobs(), _errors(), _board())
-    return _respond(data)
+    return _respond(data, viewer=viewer)
 
 
 LOG_FILES = {
@@ -320,9 +396,10 @@ def api_logs_stream(request: Request, role: str = Query("all")):
 
 
 @app.get("/api/logs/recent")
-def api_logs_recent(role: str = "all"):
+def api_logs_recent(request: Request, role: str = "all"):
     if DEMO:
-        return _respond({"lines": [{"role": "system", "source": "演示", "line": l} for l in demo.snapshot()["logs"]]})
+        return _respond({"lines": [{"role": "system", "source": "演示", "line": l} for l in demo.snapshot()["logs"]]},
+                        viewer=_viewer(request))
     if role == "all":
         rows = []
         for key in ("hanbao", "hamburger", "biubiu", "system"):
@@ -330,7 +407,7 @@ def api_logs_recent(role: str = "all"):
         rows = rows[-60:]
     else:
         rows = _log_tail(role, 40)
-    return _respond({"lines": rows})
+    return _respond({"lines": rows}, viewer=_viewer(request))
 
 
 def _warm_caches() -> None:

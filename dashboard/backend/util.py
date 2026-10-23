@@ -22,6 +22,17 @@ STATE_DB = Path(os.environ.get("HERMES_STATE_DB", str(ROOT / ".hermes" / "state.
 LIVE_LOG = Path(os.environ.get("HERMES_LIVE_LOG", str(ROOT / ".hermes" / "logs" / "hermes.log")))
 DEMO = os.environ.get("HERMES_DASHBOARD_DEMO", "") not in ("", "0", "false", "False")
 
+# Guest view: a hostname allow-list.  Only the `Host` header is trusted (never a
+# query parameter) because 8787 is loopback-only and the outside world reaches it
+# exclusively through the Cloudflare tunnel, which sets `Host` itself.
+GUEST_HOSTS = {
+    h.strip().lower()
+    for h in os.environ.get("HERMES_DASHBOARD_GUEST_HOSTS", "").split(",")
+    if h.strip()
+}
+# Local-only override for eyeballing the guest layout against demo data.
+FORCE_VIEWER = os.environ.get("HERMES_DASHBOARD_FORCE_VIEWER", "").strip().lower()
+
 UNIT_LABELS = {
     "hermes-gateway": ("憨包网关", "telegram"),
     "hermes-heybox": ("汉堡大王", "heybox"),
@@ -156,14 +167,30 @@ def error(message: str) -> dict[str, Any]:
     return {"error": redact(str(message))[:300]}
 
 
-def envelope(data: Any, warnings: list[str] | None = None) -> dict[str, Any]:
+def envelope(data: Any, warnings: list[str] | None = None, viewer: str = "owner") -> dict[str, Any]:
     return {
         "ok": True,
         "generated_at": iso(),
         "data": data,
         "warnings": warnings or [],
         "demo": DEMO,
+        "viewer": viewer,
     }
+
+
+def viewer_for(request) -> str:
+    """owner | guest.
+
+    Default is owner: DEMO mode and an empty allow-list never expose the guest
+    view.  ``HERMES_DASHBOARD_FORCE_VIEWER`` is a local-only escape hatch for
+    eyeballing the guest layout; it is not read from the request.
+    """
+    if FORCE_VIEWER in ("guest", "owner"):
+        return FORCE_VIEWER
+    if DEMO or not GUEST_HOSTS:
+        return "owner"
+    host = (request.headers.get("host") or "").split(":")[0].strip().lower()
+    return "guest" if host in GUEST_HOSTS else "owner"
 
 
 def since_days(days: int) -> datetime:
