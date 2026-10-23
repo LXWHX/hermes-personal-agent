@@ -31,6 +31,30 @@ TTL = float(os.environ.get("HERMES_DASHBOARD_TTL", "20"))
 app = FastAPI(title="Hermes Dashboard", docs_url=None, redoc_url=None)
 
 
+class _NoCacheStatic:
+    """StaticFiles sends no Cache-Control; behind the Cloudflare tunnel the
+    edge keeps serving stale css/js for hours after each deploy. Force
+    revalidation on every hit (ETag still answers 304)."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope.get("path", "").startswith("/api/"):
+            await self.app(scope, receive, send)
+            return
+
+        async def send_no_cache(message):
+            if message["type"] == "http.response.start":
+                message.setdefault("headers", []).append((b"cache-control", b"no-cache"))
+            await send(message)
+
+        await self.app(scope, receive, send_no_cache)
+
+
+app.add_middleware(_NoCacheStatic)
+
+
 def _load(name: str, loader, *args, **kwargs) -> dict:
     if DEMO:
         return demo.snapshot()[name.split(":", 1)[0]]
