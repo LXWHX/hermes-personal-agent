@@ -12,11 +12,13 @@
        systemd / journalctl / crontab / hermes-errors / hermes-board / state.db
 ```
 
-## 当前状态（2026-10-23）
+## 当前状态（2026-10-23 · 全部完成）
 
-- 服务器内网已上线：`hermes-dashboard` active/enabled，仅 `127.0.0.1:8787`
-- M1–M3 全部完成：最新为配置漂移（`/api/drift`）与系统资源（`/api/system`），commit `0c27f67`
-- 外网未开放：`cloudflared` 未安装，DNS 尚未迁入 Cloudflare，`hermes.joeli.site` 不解析
+- **外网已上线**：`https://hermes.joeli.site`（Cloudflare Access 邮箱 OTP；cloudflared 出站隧道，不开入站端口）
+- 服务器：`hermes-dashboard` + `cloudflared` 均 active/enabled，8787 仍只绑 `127.0.0.1`
+- M1–M3 全部完成：最后两块为配置漂移（`/api/drift`）与系统资源（`/api/system`），commit `0c27f67`
+- 停服演练通过（停 biubiu +15s 变红）；DNS 已从 DNSPod 迁入 Cloudflare（记录与过程见计划 §12.9）
+- 应急通道：SSH 隧道 `ssh -L 8788:127.0.0.1:8787 root@<server>`
 - 数据源已核对：6/6 服务、四个 profile 的 state.db、14 个错误源、approvals 计数一致
 - 详细验证数据、口径与每日检查清单见 [`docs/dashboard-plan.md` §12–§13](../docs/dashboard-plan.md)
 
@@ -47,19 +49,16 @@ bash server/dashboard-deploy.sh --check  # 健康检查
 systemd 单元 `hermes-dashboard` 只绑 `127.0.0.1:8787`，脚本会拒绝公网绑定。
 部署脚本不会写入 `/root/hermes-board/` 或 `/root/hermes-errors/`。
 
-### Cloudflare Tunnel（M1，需窗口期）
+### Cloudflare Tunnel（✅ 2026-10-23 已上线）
 
-前置：`joeli.site` DNS zone 已迁入 Cloudflare（apex A / www CNAME 抄全再切 NS）。
-然后在 Zero Trust 创建 Tunnel，把 token 放到 `/etc/cloudflared/token`（`chmod 600`），执行：
+zone 已迁入 Cloudflare（NS：`elisabeth` / `jaziel.ns.cloudflare.com`，从 DNSPod 平迁，零停机）。
+Tunnel `hermes-dashboard`（remotely-managed），token 在 `/etc/cloudflared/token`（600），
+systemd `cloudflared` active/enabled，4 条 QUIC 连接挂东京边缘。
 
-```bash
-bash server/dashboard-deploy.sh --with-tunnel
-```
-
-Zero Trust 配置：
-
-- Public hostname: `hermes.joeli.site` → `http://localhost:8787`
-- Access policy: 仅老板邮箱 OTP / GitHub 账号
+- Public hostname：`hermes.joeli.site` → `http://localhost:8787`（CF 界面在 Tunnel 详情 **Routes** 标签）
+- Access：Self-hosted app + policy `Allow + Emails`（One-time PIN 邮箱验证码，24h 会话）
+- 排障：`journalctl -u cloudflared -f`；重启 `systemctl restart cloudflared`
+- 换 token：更新 `/etc/cloudflared/token` 后 `systemctl restart cloudflared`
 - 不开任何入站端口；`8787` 始终只绑 loopback
 
 ## 接口

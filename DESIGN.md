@@ -1,11 +1,11 @@
 # Hermes 可视化监控面板 — 设计与实施计划
 
-> 状态：**M1 内网已上线，M2 完成，M3 完成**（2026-10-22 立项、开发并部署；托管/访问方案定稿：Cloudflare Tunnel，见 §5）
+> 状态：**全部完成，外网已上线**（M1–M3 + 停服演练 + Cloudflare Tunnel/Access；2026-10-22 立项、2026-10-23 收官）
 > 目标文件：`dashboard/`、`server/dashboard-deploy.sh`
-> 当前版本：commit `0c27f67`（2026-10-23 M3 收尾），systemd `hermes-dashboard` 已运行，仅绑 `127.0.0.1:8787`
+> 当前版本：commit `0c27f67`（M3 收尾），systemd `hermes-dashboard` + `cloudflared` 已运行；访问 `hermes.joeli.site`（Cloudflare Access，上线记录见 §12.9）
 > 本文档是执行依据：模块清单、数据源、接口契约、分期任务、验收标准、上线记录与每日续跑清单都在这里。
 > 实现说明见 `dashboard/README.md`；本机演示：`HERMES_DASHBOARD_DEMO=1`。
-> 未完成：仅剩 Cloudflare DNS/Tunnel/Access（需窗口期）；停服端到端演练已于 2026-10-23 通过。§12.3 三个线上问题均已修复关闭。
+> 计划任务全部完成（2026-10-23）。日常只需 §13.1 例行核对；面板问题走既有 runbook。
 
 ---
 
@@ -205,6 +205,7 @@ crontab -l                  # digest 23:50 / game-news / game-trends / twitch / 
 - cloudflared 只走出站连接：**不开任何入站端口、不暴露源站 IP**；8787 仍只绑 `127.0.0.1`。
 - 面板地址：`hermes.joeli.site`，认证用 Cloudflare Access 免费档（邮箱 OTP / GitHub）。
 - **前置（M1 执行，动手前与老板约窗口期）**：joeli.site 的 DNS zone 迁入 Cloudflare——域名在腾讯云注册，DNS 现挂 Vercel。步骤：CF 免费版 Add site `joeli.site` → 对照 Vercel 控制台抄全记录（apex `A 76.76.21.21`、`www CNAME cname.vercel-dns.com`，如有邮箱 MX 必须原样抄）→ 腾讯云控制台把 NS 换成 CF 分配的两个 → 先抄全再切 NS，理论零停机。**joeli.site 网站本体继续留在 Vercel，不动。**
+  （✅ 2026-10-23 已执行，实际基线与本文预写不同：DNS 实挂 **DNSPod** 而非 Vercel，apex A=`216.198.79.1`，另有 `wf` 子域 CNAME→`82e2e8454695b620.vercel-dns-017.com`；共 3 条记录全部灰云照抄，无 MX/TXT/DNSSEC。NS=`elisabeth.ns.cloudflare.com`/`jaziel.ns.cloudflare.com`。详见 §12.9。）
 - 备选：Tailscale（不动 DNS：服务器 + 自有设备装 app，`tailscale serve` 把 localhost:8787 变 `https://<host>.<tailnet>.ts.net`，仅 tailnet 内可达）；SSH 隧道（`ssh -L 8787:127.0.0.1:8787 root@<server>`，桌面应急）。
 
 脱敏（不变）：
@@ -249,7 +250,7 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
 - [x] `overview` 聚合
 - [x] 前端：角色卡 + 服务健康 + 任务看板 + 错误区
 - [x] `dashboard-deploy.sh` + systemd，绑定 127.0.0.1（2026-10-22 已部署，`active/enabled`）
-- [ ] cloudflared 部署：systemd 服务 + ingress → `localhost:8787`，`hermes.joeli.site` Tunnel hostname + Access policy（前置：DNS zone 迁入 Cloudflare，见 §5；动手前与老板约窗口期。现状：cloudflared 未安装、DNS 仍在 Vercel）
+- [x] cloudflared 部署（2026-10-23：DNS 迁 CF + Tunnel + Access + 登录墙验收，见 §12.9）
 - [x] 端到端验证（2026-10-23 演练：停 biubiu 后 15s 变红并给出原因，恢复 +20s，见 §12.8）
 
 ### M2 — 特色模块
@@ -302,8 +303,8 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
 ## 11. 新会话开场提示词
 
 > 读 `docs/dashboard-plan.md`，先看 §12 上线记录和 §13 每日续跑清单，不要重做已完成模块。
-> 当前面板已在服务器 `hermes-dashboard` 上运行（仅 127.0.0.1:8787）。每天先做 §13 的例行核对，
-> 再处理未完成项：Cloudflare Tunnel / Access（必须约窗口期，见 §5）、停服演练（M3 已于 2026-10-23 完成）。
+> 当前面板**外网已上线**：`hermes.joeli.site`（Cloudflare Access；服务器侧 `hermes-dashboard` +
+> `cloudflared`）。计划任务已全部完成（§12.7–§12.9），每天只做 §13 的例行核对即可。
 > 面板只读，任何 repair 动作走既有 runbook，不通过面板写线上状态；不要覆盖 `/root/hermes-board/`
 > 与 `/root/hermes-errors/`。改代码后按 §13.4 的发布流程走，并把结果补进 §12。
 > 遇到老板正在修的问题（§12.3）不要重复修，只记录状态。
@@ -380,7 +381,7 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
 | 2 | cron 失败在任务板与事件流同时可见 | **已验证**（watcher / Twitch 实际失败均出现） |
 | 3 | 待批/修复中与 approvals 一致 | **已验证**（待批 3，文件计数一致） |
 | 4 | 刷新无写操作、无 exec 报错 | **已验证**（接口只读；journal 无 exec 报错） |
-| 5 | 外网不能直连 8787、前端无密钥 | **部分**（8787 外网超时、源码已脱敏；Tunnel/Access 未做） |
+| 5 | 外网不能直连 8787、前端无密钥 | **已验证**（8787 仅 loopback；`hermes.joeli.site` 走 Tunnel+Access 未登录 302；无新开入站端口） |
 | 6 | 单源故障不影响其他模块 | **本地已验证**（空数据下 9 个模块独立降级；生产当前全源健康） |
 
 ### 12.7 M3 收尾上线（2026-10-23）
@@ -409,6 +410,26 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
   （预约簿 / biubiu_mem0 / 推送接口 /「已连接」）。
 - 前端 30s 轮询，页面可见最多再晚一个轮询周期；biubiu 的 24h uptime 条带在该时段
   留一段红格，属预期不是故障。
+
+### 12.9 上外网：Cloudflare DNS 迁移 + Tunnel + Access（2026-10-23）
+
+- **DNS**：joeli.site 的 zone 从 DNSPod 迁入 Cloudflare 免费版。实际记录 3 条（`@ A 216.198.79.1`、
+  `www CNAME cname-china.vercel-dns.com`、`wf CNAME 82e2e8454695b620.vercel-dns-017.com`），
+  全部 **DNS only 灰云**直连 Vercel；无 MX / TXT / DNSSEC（DS 为空确认后才切 NS）。腾讯云 ~14:20
+  提交 NS 变更（`elisabeth` / `jaziel.ns.cloudflare.com`），`.site` 注册局 **14:26 翻面**（委派
+  TTL 900s），1.1.1.1 / 8.8.8.8 即时跟上；期间新旧 zone 应答一致，全程零停机。
+- **Tunnel**：Zero Trust remotely-managed tunnel `hermes-dashboard`；token 落 `/etc/cloudflared/token`
+  （600），`dashboard-deploy.sh --with-tunnel` 安装 systemd `cloudflared`（active/enabled）。4 条 QUIC
+  连接注册东京边缘（nrt01/12/14/16）。Public hostname `hermes.joeli.site → HTTP localhost:8787`
+  ——新版 CF 界面里该配置在 Tunnel 详情的 **Routes** 标签（旧文档写的 Public Hostname 标签已改名）。
+- **Access**：Self-hosted app `hermes-dashboard`，policy `boss` = Allow + Emails `643130468@qq.com`
+  （One-time PIN），session 24h。未登录访问 302 → `muddy-meadow-5c62.cloudflareaccess.com` 登录页。
+- **验收实测**：本机（CN 出口）与服务器（东京）双视角均 302 登录墙 ✓；apex/www/wf 三站迁移前后
+  200/307/200 一致 ✓；`ss` 复核 8787 仍只绑 127.0.0.1、无新开入站端口 ✓（公网 8080 为原有
+  bark-server，与本次无关）。cloudflared 经 pkg.cloudflare.com apt 源安装（2026.10.3）。
+- **既有观察（非本次问题，留档）**：`www.joeli.site` 证书不带 www SAN（迁移前如此：Vercel 边缘只发
+  CN=joeli.site，忽略证书后 307 → apex）；要修在 Vercel 项目设置里把 www 加进域名列表即可。
+- **应急通道**：SSH 隧道仍可用（`ssh -L 8788:127.0.0.1:8787 root@<server>`），CF/Access 故障时用。
 
 ---
 
@@ -449,9 +470,7 @@ curl -s http://127.0.0.1:8787/api/drift | python3 -m json.tool | head -20
 
 ### 13.3 仍待执行（需窗口期）
 
-1. **Cloudflare**：按 §5 顺序执行 DNS 记录抄全 → NS 迁移 → Tunnel → Access；不要跳过 DNSSEC 与 MX 检查。
-
-（停服演练已于 2026-10-23 通过，见 §12.8；M3 于同日上线，见 §12.7。）
+（已全部完成：Cloudflare 迁移 + Tunnel + Access 见 §12.9；停服演练见 §12.8；M3 见 §12.7。本节清空。）
 
 ### 13.4 改代码后的发布流程
 
