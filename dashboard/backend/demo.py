@@ -326,6 +326,46 @@ def usage() -> dict:
     }
 
 
+def drift() -> dict:
+    return {
+        "repo": {
+            "commit": "9f2c1ab",
+            "committed_at": _at(11, 50),
+            "subject": "config: 去掉 teams/google_chat 的 platform_toolsets",
+            "dirty_files": 0,
+            "dirty_sample": [],
+        },
+        "artifacts": [
+            {"id": "hanbao-soul", "label": "憨包 SOUL", "repo_label": "server/SOUL.md", "live_label": ".hermes/SOUL.md", "deploy": "board-deploy.sh", "status": "same", "repo_mtime": _at(15, 44, -4)[:16], "live_mtime": _at(15, 44, -4)[:16], "tolerated": False},
+            {"id": "hamburger-soul", "label": "汉堡 SOUL", "repo_label": "server/hamburger/SOUL.md", "live_label": "profiles/hamburger/SOUL.md", "deploy": "hamburger-deploy.sh", "status": "drift", "repo_mtime": _at(10, 12, -1)[:16], "live_mtime": _at(17, 13, -3)[:16], "tolerated": False},
+            {"id": "heybox-soul", "label": "heybox SOUL", "repo_label": "server/heybox/SOUL.md + PROFILE_EXTRA.md", "live_label": "profiles/heybox/SOUL.md", "deploy": "agent-bridge-deploy.sh", "status": "same", "repo_mtime": _at(16, 37, -3)[:16], "live_mtime": _at(16, 37, -3)[:16], "tolerated": False},
+            {"id": "biubiu-soul", "label": "biubiu SOUL", "repo_label": "server/biubiu/SOUL.md + PROFILE_EXTRA.md", "live_label": "profiles/biubiu/SOUL.md", "deploy": "agent-bridge-deploy.sh", "status": "same", "repo_mtime": _at(16, 37, -3)[:16], "live_mtime": _at(16, 37, -3)[:16], "tolerated": False},
+            {"id": "config", "label": "config.yaml（模板）", "repo_label": "server/config.yaml", "live_label": ".hermes/config.yaml", "deploy": "手工同步", "status": "template", "repo_mtime": _at(11, 50)[:16], "live_mtime": _at(11, 49)[:16], "tolerated": True},
+        ],
+        "summary": {"same": 3, "drift": 1, "template": 1, "missing": 0},
+    }
+
+
+def system() -> dict:
+    return {
+        "cores": 1,
+        "load": [0.71, 0.97, 0.79],
+        "uptime_seconds": 12 * 86400 + 18 * 3600 + 2280,
+        "memory": {"total": 2_059_308_032, "available": 1_122_500_800, "used_pct": 45.5},
+        "swap": {"total": 5_660_000_000, "used": 913_600_000, "used_pct": 16.1},
+        "swappiness": 10,
+        "malloc_arena_max": 2,
+        "disk": {"total": 52 * 1024 ** 3, "used": 22 * 1024 ** 3, "free": 28 * 1024 ** 3, "percent": 45.0},
+        "network": [
+            {"id": "telegram", "name": "Telegram API", "ok": True, "status": 200, "latency_ms": 187},
+            {"id": "discord", "name": "Discord API", "ok": True, "status": 200, "latency_ms": 142},
+            {"id": "xiaoheihe", "name": "小黑盒", "ok": True, "status": 200, "latency_ms": 64},
+            {"id": "opencode", "name": "OpenCode", "ok": False, "status": None, "latency_ms": None, "error": "TimeoutError"},
+        ],
+        "checked": iso(),
+    }
+
+
 def events() -> dict:
     return {
         "events": [
@@ -370,6 +410,8 @@ def snapshot() -> dict:
         "board": board(),
         "outputs": outputs(),
         "usage": usage(),
+        "drift": drift(),
+        "system": system(),
         "events": events(),
         "logs": logs(),
     }

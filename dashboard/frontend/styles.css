@@ -1043,6 +1043,66 @@ main { padding: 0 var(--pad); }
 .log-line.is-error .log-line__text { color: #ff6b7c; }
 .log-empty { color: #8a8a8a; }
 
+/* ------------------------------------------------------- system / drift */
+.ops-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 30px;
+}
+.ops-grid > * { min-width: 0; }
+.host-rows { border-top: 1px solid var(--line-strong); }
+.host-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.host-row > span:first-child {
+  font-size: 8px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--grey);
+  align-self: center;
+}
+.host-row strong {
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.host-row .host-note { grid-column: 1 / -1; font-size: 9px; color: var(--grey); }
+.host-meter { padding: 8px 0 10px; border-bottom: 1px solid var(--line); }
+.host-meter__top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--grey);
+}
+.host-meter__top .tabular { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+.meter { height: 9px; margin: 4px 0 3px; background: rgba(0, 0, 0, 0.07); }
+.meter i { display: block; height: 100%; background: var(--ink); }
+.meter i.is-high { background: var(--alert); }
+.table--reach .service-name { font-weight: 700; }
+.repo-card { padding: 4px 0 14px; }
+.repo-card__commit {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: -0.05em;
+  color: transparent;
+  -webkit-text-stroke: 1px var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.repo-card__subject { margin-top: 8px; font-size: 12px; font-weight: 700; line-height: 1.4; }
+.repo-card__dirty { margin-top: 8px; font-size: 9px; color: var(--alert); overflow-wrap: anywhere; }
+.table--drift td:first-child { min-width: 150px; }
+.table--drift .micro { white-space: nowrap; }
+#drift-foot { margin-top: 8px; }
+
 /* --------------------------------------------------------------- footer */
 .footer {
   display: grid;
@@ -1068,7 +1128,7 @@ main { padding: 0 var(--pad); }
   .role { min-height: 330px; border-bottom: 1px solid var(--line-strong); }
   .role:nth-child(2) { border-right: 0; }
   .system-card { border-top: 0; }
-  .errors-grid, .usage-grid, .board-grid { grid-template-columns: minmax(0, 1fr); }
+  .errors-grid, .usage-grid, .board-grid, .ops-grid { grid-template-columns: minmax(0, 1fr); }
   .outputs-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 

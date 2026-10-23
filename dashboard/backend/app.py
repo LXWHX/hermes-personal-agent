@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 
 import demo
 from cache import CACHE
-from collectors import activity, board, errors, events, jobs, outputs, overview, services, usage
+from collectors import activity, board, drift, errors, events, jobs, outputs, overview, services, system, usage
 from util import DEMO, ROOT, envelope, iso, redact, tail
 
 FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
@@ -81,6 +81,35 @@ def _usage(include_quota: bool = True) -> dict:
     if include_quota:
         return CACHE.get("usage", 60, usage.collect)
     return CACHE.get("usage:profiles", 45, lambda: usage.collect(False))
+
+
+def _drift() -> dict:
+    if DEMO:
+        return demo.snapshot()["drift"]
+    try:
+        return CACHE.get("drift", 60, drift.collect)
+    except Exception as exc:  # git may be missing or the repo may be gone
+        return {"error": redact(f"{type(exc).__name__}: {exc}")[:240],
+                "_warnings": ["drift 采集失败"]}
+
+
+def _system() -> dict:
+    if DEMO:
+        return demo.snapshot()["system"]
+    host = _load("system:host", system.collect_host)
+    try:
+        # outbound probes are slow; cache them longer than the /proc numbers
+        net = CACHE.get("system:net", 120, system.collect_network)
+    except Exception as exc:
+        net = {"network": None, "checked": None,
+               "_warnings": [f"system:net 采集失败：{redact(str(exc))[:120]}"]}
+    merged = {key: value for key, value in host.items() if key != "_warnings"}
+    merged["network"] = net.get("network")
+    merged["checked"] = net.get("checked")
+    warnings = list(host.get("_warnings") or []) + list(net.get("_warnings") or [])
+    if warnings:
+        merged["_warnings"] = warnings
+    return merged
 
 
 @app.get("/health")
@@ -153,6 +182,16 @@ def api_outputs():
 @app.get("/api/usage")
 def api_usage():
     return _respond(_usage())
+
+
+@app.get("/api/drift")
+def api_drift():
+    return _respond(_drift())
+
+
+@app.get("/api/system")
+def api_system():
+    return _respond(_system())
 
 
 @app.get("/api/events")
@@ -275,11 +314,11 @@ def _warm_caches() -> None:
     if DEMO:
         return
     try:
-        with ThreadPoolExecutor(max_workers=7) as pool:
+        with ThreadPoolExecutor(max_workers=9) as pool:
             futures = [
                 pool.submit(_services), pool.submit(_jobs), pool.submit(_errors),
                 pool.submit(_board), pool.submit(_activity), pool.submit(_outputs),
-                pool.submit(_usage),
+                pool.submit(_usage), pool.submit(_drift), pool.submit(_system),
             ]
             for future in futures:
                 future.result()

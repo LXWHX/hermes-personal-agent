@@ -59,6 +59,7 @@
     <a href="#usage" class="index__link">08 模型 / 额度</a>
     <a href="#events" class="index__link">09 事件</a>
     <a href="#logs" class="index__link">10 日志</a>
+    <a href="#system" class="index__link">11 系统 / 漂移</a>
     <span class="index__spacer"></span>
     <span class="range" role="group" aria-label="时间范围">
       <span class="range__label">RANGE</span>
@@ -311,6 +312,48 @@
       <span class="log-status micro" id="log-status">等待连接</span>
     </div>
     <pre class="log-console" id="log-console" aria-live="off"><span class="log-empty">等待日志流…</span></pre>
+  </section>
+
+  <section class="section" id="system" data-index="11">
+    <div class="section-head">
+      <span class="section-num">[11]</span>
+      <h2>系统与配置 <span class="section-head__en">SYSTEM / DRIFT</span></h2>
+      <p class="section-note">主机资源、内存加固旋钮、出站可达；线上副本与仓库检出的一致性。</p>
+      <span class="stamp" id="system-stamp">—</span>
+    </div>
+    <div class="ops-grid">
+      <div class="ops-host">
+        <h3 class="subhead">主机 / HOST</h3>
+        <div id="host-rows" class="host-rows"><p class="empty">读取主机状态…</p></div>
+        <h3 class="subhead">出站可达 / REACHABILITY <span class="micro" id="reach-note">—</span></h3>
+        <div class="table-wrap">
+          <table class="table table--reach">
+            <thead>
+              <tr><th scope="col">目标</th><th scope="col">状态</th><th scope="col" class="num">HTTP</th><th scope="col" class="num">延迟</th></tr>
+            </thead>
+            <tbody id="reach-body">
+              <tr><td colspan="4" class="empty">读取探测…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="ops-drift">
+        <h3 class="subhead">仓库 / REPO <span class="micro" id="repo-dirty">—</span></h3>
+        <div id="repo-card" class="repo-card"><p class="empty">读取仓库状态…</p></div>
+        <h3 class="subhead">漂移 / ARTIFACTS <span class="micro" id="drift-summary">—</span></h3>
+        <div class="table-wrap">
+          <table class="table table--drift">
+            <thead>
+              <tr><th scope="col">副本</th><th scope="col">状态</th><th scope="col">部署</th><th scope="col" class="num">线上更新</th></tr>
+            </thead>
+            <tbody id="drift-body">
+              <tr><td colspan="4" class="empty">读取漂移…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="micro" id="drift-foot">—</p>
+      </div>
+    </div>
   </section>
 </main>
 

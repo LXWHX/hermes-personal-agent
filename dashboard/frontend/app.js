@@ -24,6 +24,8 @@
     '/api/board': 'board',
     '/api/outputs': 'outputs',
     '/api/usage': 'usage',
+    '/api/drift': 'drift',
+    '/api/system': 'system',
     '/api/events': 'events',
     '/api/logs/recent': 'logs',
   };
@@ -52,7 +54,14 @@
   const num = (value) => value === null || value === undefined || Number.isNaN(Number(value))
     ? '—' : Number(value).toLocaleString('en-US');
 
-  const pct = (value) => (value === null || value === undefined) ? '—' : `${Math.round(value)}%`;
+  const pct = (value) => (value === null || value === undefined || !Number.isFinite(value)) ? '—' : `${Math.round(value)}%`;
+
+  const humanBytes = (value) => {
+    if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+    if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(1)} GB`;
+    if (value >= 1024 ** 2) return `${(value / 1024 ** 2).toFixed(0)} MB`;
+    return `${(value / 1024).toFixed(0)} KB`;
+  };
 
   function parseDate(value) {
     if (!value) return null;
@@ -630,6 +639,90 @@
     $('#usage-note').textContent = data.estimate_note || '';
   }
 
+  /* -------------------------------------------------------- system / drift */
+  function driftTag(status) {
+    const map = {
+      same: ['SAME', 'ok'], drift: ['DRIFT', 'bad'], template: ['TEMPLATE', 'unknown'],
+      repo_missing: ['NO REPO', 'bad'], live_missing: ['未部署', 'bad'],
+    };
+    const [label, cls] = map[status] || ['UNKNOWN', 'unknown'];
+    return `<span class="state-tag state-tag--${cls}">${label}</span>`;
+  }
+
+  function renderDrift(payload) {
+    const data = payload && payload.data;
+    if (!data || data.error) {
+      $('#repo-card').innerHTML = `<p class="empty">漂移数据不可用</p>`;
+      $('#drift-body').innerHTML = `<tr><td colspan="4" class="empty">漂移数据不可用</td></tr>`;
+      return;
+    }
+    const repo = data.repo || {};
+    const dirty = repo.dirty_files || 0;
+    $('#repo-dirty').textContent = repo.commit ? `${repo.commit} · ${dirty ? `DIRTY ${dirty}` : 'CLEAN'}` : '—';
+    $('#repo-card').innerHTML = `
+      <p class="repo-card__commit">${esc(repo.commit || '—')}</p>
+      <p class="repo-card__subject">${esc(repo.subject || '—')}</p>
+      <p class="micro">${repo.committed_at ? `${dateLabel(repo.committed_at)} ${hhmm(repo.committed_at)} · ${relTime(repo.committed_at)}` : '—'}</p>
+      ${dirty ? `<p class="repo-card__dirty">工作树 ${num(dirty)} 个未提交改动：${esc((repo.dirty_sample || []).join(' · '))}</p>` : ''}`;
+    const s = data.summary || {};
+    $('#drift-summary').textContent = `${s.same ?? '—'} 一致 · ${s.drift ?? '—'} 漂移 · ${s.missing ?? '—'} 缺失`;
+    const arts = data.artifacts || [];
+    $('#drift-body').innerHTML = arts.map((a) => `
+      <tr>
+        <td><span class="service-name">${esc(a.label)}</span><span class="service-unit">${esc(a.live_label)}</span></td>
+        <td>${driftTag(a.status)}</td>
+        <td class="micro">${esc(a.deploy)}</td>
+        <td class="num" title="仓库 ${esc(a.repo_mtime || '—')}">${a.live_mtime ? `${dateLabel(a.live_mtime)} ${String(a.live_mtime).slice(11, 16)}` : '—'}</td>
+      </tr>`).join('') || `<tr><td colspan="4" class="empty">没有漂移条目</td></tr>`;
+    $('#drift-foot').textContent = '一致性 = sha256(仓库检出) vs 线上副本；config.yaml 为手工同步模板，差异属预期。';
+  }
+
+  function renderSystem(payload) {
+    setStamp('system-stamp', payload);
+    const data = payload && payload.data;
+    const hostEl = $('#host-rows');
+    if (!data || data.error) {
+      hostEl.innerHTML = `<p class="empty">系统数据不可用</p>`;
+      $('#reach-body').innerHTML = `<tr><td colspan="4" class="empty">探测数据不可用</td></tr>`;
+      return;
+    }
+    const mem = data.memory || {};
+    const swap = data.swap || {};
+    const disk = data.disk || {};
+    const load = Array.isArray(data.load) ? data.load : null;
+    const meter = (label, value, note) => {
+      const width = Number.isFinite(value) ? Math.max(1, Math.min(100, value)) : 1;
+      return `<div class="host-meter">
+        <div class="host-meter__top"><span>${esc(label)}</span><span class="tabular">${pct(value)}</span></div>
+        <div class="meter"><i class="${value > 85 ? 'is-high' : ''}" style="width:${width}%"></i></div>
+        <span class="micro">${esc(note)}</span>
+      </div>`;
+    };
+    hostEl.innerHTML = `
+      <div class="host-row">
+        <span>负载 / UPTIME</span>
+        <strong>${load ? `${load[0].toFixed(2)} ${load[1].toFixed(2)} ${load[2].toFixed(2)}` : '—'}</strong>
+        <span class="host-note">${num(data.cores)} 核 · 开机 ${duration(data.uptime_seconds)}</span>
+      </div>
+      ${meter('内存 / MEMORY', mem.used_pct, `已用 ${humanBytes(mem.total != null && mem.available != null ? mem.total - mem.available : null)} / ${humanBytes(mem.total)} · 可用 ${humanBytes(mem.available)}`)}
+      ${meter('SWAP', swap.used_pct, `${humanBytes(swap.used)} / ${humanBytes(swap.total)}`)}
+      ${meter('磁盘 / DISK', disk.percent, `${humanBytes(disk.used)} / ${humanBytes(disk.total)} · 剩余 ${humanBytes(disk.free)}`)}
+      <div class="host-row">
+        <span>内核旋钮 / TUNING</span>
+        <strong>swappiness ${data.swappiness ?? '—'} · ARENA ${data.malloc_arena_max ?? '—'}</strong>
+        <span class="host-note">2G VPS 内存加固：低 swappiness + MALLOC_ARENA_MAX=2</span>
+      </div>`;
+    const net = data.network || [];
+    $('#reach-body').innerHTML = net.length ? net.map((n) => `
+      <tr>
+        <td class="service-name">${esc(n.name)}</td>
+        <td><span class="state-tag state-tag--${n.ok ? 'ok' : 'bad'}">${n.ok ? 'REACHABLE' : 'DOWN'}</span></td>
+        <td class="num">${n.status ?? '—'}</td>
+        <td class="num">${n.latency_ms == null ? esc(n.error || '—') : `${num(n.latency_ms)} ms`}</td>
+      </tr>`).join('') : `<tr><td colspan="4" class="empty">无探测结果</td></tr>`;
+    $('#reach-note').textContent = data.checked ? `T ${relTime(data.checked)}` : '—';
+  }
+
   /* ----------------------------------------------------------------- events */
   function saveMuted() {
     localStorage.setItem('hermes-muted-events', JSON.stringify(Array.from(state.muted)));
@@ -742,7 +835,7 @@
       }
     }
 
-    const [overviewRes, services, jobs, activity, errors, board, outputs, usage, events] = await Promise.all([
+    const [overviewRes, services, jobs, activity, errors, board, outputs, usage, drift, system, events] = await Promise.all([
       overview ? Promise.resolve(overview) : load('overview', '/api/overview'),
       load('services', '/api/services'),
       load('jobs', '/api/jobs'),
@@ -751,6 +844,8 @@
       load('board', '/api/board'),
       load('outputs', '/api/outputs'),
       load('usage', '/api/usage'),
+      load('drift', '/api/drift'),
+      load('system', '/api/system'),
       load('events', '/api/events'),
     ]);
 
@@ -762,6 +857,8 @@
     try { renderBoard(board); } catch (e) { console.error(e); }
     try { renderOutputs(outputs); } catch (e) { console.error(e); }
     try { renderUsage(usage); } catch (e) { console.error(e); }
+    try { renderDrift(drift); } catch (e) { console.error(e); }
+    try { renderSystem(system); } catch (e) { console.error(e); }
     try { renderEvents(events); } catch (e) { console.error(e); }
 
     state.lastUpdate = Date.now();
