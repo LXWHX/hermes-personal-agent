@@ -5,7 +5,7 @@
 > 当前版本：commit `0c27f67`（2026-10-23 M3 收尾），systemd `hermes-dashboard` 已运行，仅绑 `127.0.0.1:8787`
 > 本文档是执行依据：模块清单、数据源、接口契约、分期任务、验收标准、上线记录与每日续跑清单都在这里。
 > 实现说明见 `dashboard/README.md`；本机演示：`HERMES_DASHBOARD_DEMO=1`。
-> 未完成：Cloudflare DNS/Tunnel/Access（需窗口期）、停服端到端演练。§12.3 三个线上问题均已修复关闭（2026-10-23 复核）。
+> 未完成：仅剩 Cloudflare DNS/Tunnel/Access（需窗口期）；停服端到端演练已于 2026-10-23 通过。§12.3 三个线上问题均已修复关闭。
 
 ---
 
@@ -250,7 +250,7 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
 - [x] 前端：角色卡 + 服务健康 + 任务看板 + 错误区
 - [x] `dashboard-deploy.sh` + systemd，绑定 127.0.0.1（2026-10-22 已部署，`active/enabled`）
 - [ ] cloudflared 部署：systemd 服务 + ingress → `localhost:8787`，`hermes.joeli.site` Tunnel hostname + Access policy（前置：DNS zone 迁入 Cloudflare，见 §5；动手前与老板约窗口期。现状：cloudflared 未安装、DNS 仍在 Vercel）
-- [ ] 端到端验证：手动停 `hermes-biubiu`，页面 30s 内变红（需在窗口期执行，尚未做）
+- [x] 端到端验证（2026-10-23 演练：停 biubiu 后 15s 变红并给出原因，恢复 +20s，见 §12.8）
 
 ### M2 — 特色模块
 - [x] `activity`（state.db 只读 + 7d 热力图）
@@ -376,7 +376,7 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
 
 | # | 标准 | 状态 |
 |---|---|---|
-| 1 | 停服务 30s 内角色卡变红 | **未演练**（需窗口期，见 §13.3） |
+| 1 | 停服务 30s 内角色卡变红 | **已验证**（2026-10-23 演练：+15s 变红 +「服务停止，房间不可用」，见 §12.8） |
 | 2 | cron 失败在任务板与事件流同时可见 | **已验证**（watcher / Twitch 实际失败均出现） |
 | 3 | 待批/修复中与 approvals 一致 | **已验证**（待批 3，文件计数一致） |
 | 4 | 刷新无写操作、无 exec 报错 | **已验证**（接口只读；journal 无 exec 报错） |
@@ -399,6 +399,16 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
   phase-o / twitch-drops 三处），按「只暂存 dashboard → stash 其 WIP → rebase → pop」
   流程避开，未动其内容。
 - §13.2 两项老板修复同日验证关闭（见 §12.3）。
+
+### 12.8 停服演练通过（2026-10-23 13:48）
+
+- 预检：biubiu active，房间上次活跃 09:05（空闲时段）；基线角色卡 silent。
+- `systemctl stop hermes-biubiu` → **+15s** `/api/services` 变 `inactive/offline`；角色卡
+  **offline「服务停止，房间不可用」** —— 变红 + 原因，验收标准 1 通过（30s 内）。
+- 停机 16s 后 `start` → **+20s** API 回 active；服务日志确认重连完成
+  （预约簿 / biubiu_mem0 / 推送接口 /「已连接」）。
+- 前端 30s 轮询，页面可见最多再晚一个轮询周期；biubiu 的 24h uptime 条带在该时段
+  留一段红格，属预期不是故障。
 
 ---
 
@@ -439,10 +449,9 @@ curl -s http://127.0.0.1:8787/api/drift | python3 -m json.tool | head -20
 
 ### 13.3 仍待执行（需窗口期）
 
-1. **停服演练**：`systemctl stop hermes-biubiu` → 30s 内页面变红 → `start` 恢复；完成后勾选 §7 M1 最后一项。
-2. **Cloudflare**：按 §5 顺序执行 DNS 记录抄全 → NS 迁移 → Tunnel → Access；不要跳过 DNSSEC 与 MX 检查。
+1. **Cloudflare**：按 §5 顺序执行 DNS 记录抄全 → NS 迁移 → Tunnel → Access；不要跳过 DNSSEC 与 MX 检查。
 
-（M3 配置漂移与系统资源已于 2026-10-23 上线，见 §12.7。）
+（停服演练已于 2026-10-23 通过，见 §12.8；M3 于同日上线，见 §12.7。）
 
 ### 13.4 改代码后的发布流程
 
