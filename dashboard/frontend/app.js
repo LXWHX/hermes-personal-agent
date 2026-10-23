@@ -94,6 +94,109 @@
     }, 40);
   }
 
+  /* ------------------------------------------------- cursor layer (v2) */
+  const FINE = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  const WIPE_SEL = '.index__link, .toc-rail__link, .range__btn, .log-filter, .text-btn, .mute-btn';
+
+  /* ink block wipes in from the entered edge, retracts toward the exited edge */
+  function initWipes() {
+    $$(WIPE_SEL).forEach((el) => el.classList.add('wipe'));
+    if (!FINE) return;
+    const sideOf = (el, x) => {
+      const r = el.getBoundingClientRect();
+      return x < r.left + r.width / 2 ? 'left' : 'right';
+    };
+    const crossed = (e) => {
+      const el = e.target instanceof Element ? e.target.closest('.wipe') : null;
+      if (!el || (e.relatedTarget instanceof Node && el.contains(e.relatedTarget))) return null;
+      return el;
+    };
+    document.addEventListener('pointerover', (e) => {
+      const el = crossed(e);
+      if (el) el.style.setProperty('--wipe-x', sideOf(el, e.clientX));
+    });
+    document.addEventListener('pointerout', (e) => {
+      const el = crossed(e);
+      if (el) el.style.setProperty('--wipe-x', sideOf(el, e.clientX));
+    });
+  }
+
+  /* crosshair reticle: hairlines lead the pointer, readout trails */
+  function initReticle() {
+    if (!FINE || !motionOK) return;
+    const root = $('.reticle');
+    if (!root) return;
+    const lineX = root.querySelector('.reticle__x');
+    const lineY = root.querySelector('.reticle__y');
+    const tag = root.querySelector('.reticle__tag');
+    let tx = 0, ty = 0, x = 0, y = 0, lx = 0, ly = 0;
+    let raf = 0, seen = false, mode = '';
+
+    const pad = (n) => String(Math.max(0, Math.round(n))).padStart(4, '0');
+    const setMode = (next) => {
+      if (mode === next) return;
+      mode = next;
+      if (next) {
+        tag.textContent = next;
+        tag.classList.remove('is-swap');
+        void tag.offsetWidth;
+        tag.classList.add('is-swap');
+      }
+    };
+
+    const frame = () => {
+      x += (tx - x) * 0.5;
+      y += (ty - y) * 0.5;
+      lx += (tx - lx) * 0.16;
+      ly += (ty - ly) * 0.16;
+      lineX.style.transform = `translate3d(0, ${y.toFixed(1)}px, 0)`;
+      lineY.style.transform = `translate3d(${x.toFixed(1)}px, 0, 0)`;
+      tag.style.transform = `translate3d(${(lx + 14).toFixed(1)}px, ${(ly + 16).toFixed(1)}px, 0)`;
+      if (!mode) tag.textContent = `X ${pad(x)} · Y ${pad(y)}`;
+      const settled = Math.abs(tx - lx) < 0.4 && Math.abs(ty - ly) < 0.4;
+      raf = settled ? 0 : requestAnimationFrame(frame);
+    };
+    const wake = () => { if (!raf) raf = requestAnimationFrame(frame); };
+
+    document.addEventListener('pointermove', (e) => {
+      tx = e.clientX;
+      ty = e.clientY;
+      if (!seen) { seen = true; x = lx = tx; y = ly = ty; }
+      root.classList.add('is-on');
+      const el = e.target instanceof Element ? e.target : null;
+      if (el && el.closest('.log-console')) setMode('TAIL');
+      else if (el && el.closest('a, button, summary, input, select, textarea')) setMode('▸ EXEC');
+      else setMode('');
+      wake();
+    }, { passive: true });
+    document.documentElement.addEventListener('mouseleave', () => root.classList.remove('is-on'));
+    document.documentElement.classList.add('cursor-on');
+  }
+
+  /* heatmap: the hovered hour column lights across all days */
+  function initHeatColumns() {
+    if (!FINE) return;
+    const host = $('#heatmaps');
+    if (!host) return;
+    let marked = [];
+    const clear = () => {
+      marked.forEach((el) => el.classList.remove('is-col'));
+      marked = [];
+    };
+    host.addEventListener('pointerover', (e) => {
+      const cell = e.target instanceof Element ? e.target.closest('.heatmap__cell') : null;
+      if (!cell || cell.dataset.h === undefined) { clear(); return; }
+      const map = cell.closest('.heatmap');
+      if (!map) { clear(); return; }
+      if (marked.length && marked[0].dataset.h === cell.dataset.h
+          && marked[0].closest('.heatmap') === map) return;
+      clear();
+      marked = Array.from(map.querySelectorAll(`[data-h="${cell.dataset.h}"]`));
+      marked.forEach((el) => el.classList.add('is-col'));
+    });
+    host.addEventListener('pointerleave', clear);
+  }
+
   /* bars morph from previous width to new width across polls */
   const barPrev = new Map();
   function morphBars(root) {
@@ -417,13 +520,13 @@
       const total = roleCells.reduce((sum, c) => sum + c.count, 0);
       const hours = Array.from({ length: 24 }, (_, h) => {
         const label = [0, 6, 12, 18, 23].includes(h) ? String(h).padStart(2, '0') : '';
-        return `<span class="heatmap__hour">${label}</span>`;
+        return `<span class="heatmap__hour" data-h="${h}">${label}</span>`;
       }).join('');
       const rows = dates.map((date, di) => {
         const row = Array.from({ length: 24 }, (_, hour) => {
           const count = byKey.get(`${role}|${date}|${hour}`) || 0;
           const alpha = count === 0 ? 0.03 : Math.max(0.1, Math.min(1, count / max));
-          return `<span class="heatmap__cell" style="--a:${alpha.toFixed(3)};--d:${di * 6 + hour * 16}ms" title="${esc(date)} ${String(hour).padStart(2, '0')}:00 · ${count} 条"></span>`;
+          return `<span class="heatmap__cell" data-h="${hour}" style="--a:${alpha.toFixed(3)};--d:${di * 6 + hour * 16}ms" title="${esc(date)} ${String(hour).padStart(2, '0')}:00 · ${count} 条"></span>`;
         }).join('');
         return `<span class="heatmap__day">${dateLabel(date)}</span>${row}`;
       }).join('');
@@ -842,7 +945,7 @@
         <span class="event__time">${e.time ? `${dateLabel(e.time)} ${hhmm(e.time)}` : '—'}</span>
         <span class="event__type">${esc(EVENT_TYPES[e.type] || e.type)}</span>
         <div><p class="event__title">${esc(e.title)}</p><p class="event__detail">${esc(e.detail || '')}</p></div>
-        <span class="event__action"><button type="button" class="mute-btn" data-mute="${esc(e.id)}">${muted ? '取消静音' : '静音'}</button></span>
+        <span class="event__action"><button type="button" class="mute-btn wipe" data-mute="${esc(e.id)}">${muted ? '取消静音' : '静音'}</button></span>
       </div>`;
     }).join('');
   }
@@ -1060,6 +1163,9 @@
     $('#built-at').textContent = `BUILD ${new Date().toISOString().slice(0, 10)}`;
     $('#clock').textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false });
     document.documentElement.classList.add('js-motion');
+    initWipes();
+    initReticle();
+    initHeatColumns();
     if (motionOK) {
       const wm = $('.wordmark h1');
       $$('.wm-l').forEach((span) => { span.dataset.ch = span.textContent; });

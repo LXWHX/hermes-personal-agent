@@ -80,7 +80,6 @@ sup { font-size: 0.45em; vertical-align: super; }
   cursor: pointer;
   border-bottom: 1px solid currentColor;
 }
-.text-btn:hover { background: var(--ink); color: var(--ground); }
 
 /* ---------------------------------------------------------- demo banner */
 .demo-banner {
@@ -1241,6 +1240,7 @@ main { padding: 0 var(--pad); }
   transform: scaleX(0);
   transform-origin: 0 50%;
   transition: transform 1s linear;
+  will-change: transform;
 }
 
 /* value change flash */
@@ -1336,8 +1336,6 @@ main { padding: 0 var(--pad); }
   border-left: 2px solid transparent;
   transition: background var(--fast) linear, color var(--fast) linear, border-color 0.14s var(--ease-mech);
 }
-.toc-rail__link:hover,
-.toc-rail__link:active { background: var(--ink); color: var(--ground); }
 .toc-rail__link.is-active { color: var(--ink); font-weight: 700; border-left-color: var(--ink); }
 .toc-rail__num { font-variant-numeric: tabular-nums; }
 .toc-rail__link:focus-visible { outline-offset: -3px; }
@@ -1352,3 +1350,90 @@ main { padding: 0 var(--pad); }
   html.js-motion .toc-rail { animation: toc-in 0.5s var(--ease-mech) 0.45s both; }
 }
 @keyframes toc-in { from { transform: translateX(100%); } }
+
+/* ------------------------------------------------------------------
+   MOTION LAYER v2 — CURSOR (2026-10-23)
+   Crosshair reticle + directional wipe hovers + hour-column
+   highlight. Everything pointer-driven is gated twice: the reticle
+   only exists once JS confirms a fine pointer without reduced
+   motion (html.cursor-on); wipe hovers need (hover: hover) so touch
+   never paints a sticky ink block. Vocabulary unchanged: ink/ground
+   inversion, one easing, red still reserved for failure.
+   ------------------------------------------------------------------ */
+
+/* crosshair reticle: two hairlines lead, the readout trails (JS lerp) */
+.reticle { display: none; pointer-events: none; }
+html.cursor-on .reticle { display: block; }
+.reticle__x,
+.reticle__y {
+  position: fixed;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.16);
+  opacity: 0;
+  transition: opacity 0.2s linear;
+  will-change: transform;
+}
+.reticle__x { left: 0; right: 0; top: 0; height: 1px; }
+.reticle__y { top: 0; bottom: 0; left: 0; width: 1px; }
+.reticle__tag {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 61;
+  padding: 2px 6px;
+  background: var(--ink);
+  color: var(--ground);
+  outline: 1px solid var(--ground);
+  outline-offset: -2px;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.2s linear;
+  will-change: transform;
+}
+.reticle.is-on .reticle__x,
+.reticle.is-on .reticle__y,
+.reticle.is-on .reticle__tag { opacity: 1; }
+@keyframes tag-swap { 0%, 55% { opacity: 0.15; } }
+.reticle__tag.is-swap { animation: tag-swap 0.14s steps(1, end) 1; }
+html.cursor-on, html.cursor-on * { cursor: none !important; }
+
+/* directional wipe: the ink block enters from the edge the pointer
+   crossed and retracts toward the edge it exits (JS sets --wipe-x) */
+@media (hover: hover) {
+  .wipe { position: relative; z-index: 0; transition: color 0.16s linear; }
+  .wipe::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--ink);
+    transform: scaleX(0);
+    transform-origin: var(--wipe-x, left) 50%;
+    transition: transform 0.16s var(--ease-mech);
+  }
+  .wipe:hover,
+  .wipe:active { color: var(--ground); }
+  .wipe:hover::before,
+  .wipe:active::before { transform: scaleX(1); }
+
+  /* breathing room for the ink block, net-zero via matching negative margin */
+  .index__link,
+  .range__btn,
+  .log-filter,
+  .text-btn,
+  .mute-btn { padding: 2px 6px; margin: -2px -6px; }
+}
+
+/* heatmap: hovering a cell lights its whole hour column */
+.heatmap__cell.is-col { outline-color: rgba(0, 0, 0, 0.32); }
+.heatmap__hour.is-col { color: var(--ink); font-weight: 700; }
+
+/* uptime segments magnify under the cursor (they carry a title) */
+@media (hover: hover) and (pointer: fine) {
+  .uptime i { transition: transform 90ms var(--ease-mech); }
+  .uptime i:hover { transform: scaleY(1.6); }
+}
