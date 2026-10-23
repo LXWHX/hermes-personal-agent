@@ -42,6 +42,10 @@
     logRole: 'hanbao',
     logSource: null,
     lastFocus: null,
+    activitySig: null,
+    jobsSig: null,
+    sparkSig: null,
+    costSig: null,
   };
 
   const $ = (sel) => document.querySelector(sel);
@@ -62,6 +66,76 @@
     if (value >= 1024 ** 2) return `${(value / 1024 ** 2).toFixed(0)} MB`;
     return `${(value / 1024).toFixed(0)} KB`;
   };
+
+  /* --------------------------------------------------------- motion layer */
+  const motionOK = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const GLYPHS = 'HERMES#/<>*+%';
+
+  const sigOf = (value) => {
+    try { return JSON.stringify(value); } catch (_) { return null; }
+  };
+
+  function setPollLine(ratio) {
+    const el = $('#poll-line-i');
+    if (el) el.style.transform = `scaleX(${Math.max(0, Math.min(1, ratio)).toFixed(4)})`;
+  }
+
+  function scramble(el) {
+    const spans = $$('.wm-l');
+    if (!spans.length || el.dataset.scrambling) return;
+    el.dataset.scrambling = '1';
+    let frame = 0;
+    const timer = setInterval(() => {
+      frame += 1;
+      spans.forEach((span, i) => {
+        span.textContent = frame >= 5 + i * 2 ? span.dataset.ch : GLYPHS.charAt((Math.random() * GLYPHS.length) | 0);
+      });
+      if (frame >= 5 + spans.length * 2) { clearInterval(timer); delete el.dataset.scrambling; }
+    }, 40);
+  }
+
+  /* bars morph from previous width to new width across polls */
+  const barPrev = new Map();
+  function morphBars(root) {
+    if (!root) return;
+    const bars = Array.from(root.querySelectorAll('[data-w]'));
+    if (!bars.length) return;
+    bars.forEach((el) => { el.style.width = (el.dataset.key && barPrev.get(el.dataset.key)) || '0%'; });
+    void root.offsetWidth;
+    bars.forEach((el) => {
+      el.style.width = el.dataset.w;
+      if (el.dataset.key) barPrev.set(el.dataset.key, el.dataset.w);
+    });
+  }
+
+  /* numbers flash ink when the value changed since last poll */
+  const valSeen = new Map();
+  function flashVal(el, text, key) {
+    if (!el) return;
+    const next = String(text);
+    const changed = valSeen.has(key) && valSeen.get(key) !== next;
+    el.textContent = next;
+    valSeen.set(key, next);
+    if (changed && motionOK) {
+      el.classList.remove('is-flash');
+      void el.offsetWidth;
+      el.classList.add('is-flash');
+      setTimeout(() => el.classList.remove('is-flash'), 620);
+    }
+  }
+
+  function markFlash(root) {
+    if (!root) return;
+    root.querySelectorAll('[data-v]').forEach((el) => {
+      const key = el.dataset.vk || '';
+      const changed = valSeen.has(key) && valSeen.get(key) !== el.dataset.v;
+      valSeen.set(key, el.dataset.v);
+      if (changed && motionOK) {
+        el.classList.add('is-flash');
+        setTimeout(() => el.classList.remove('is-flash'), 620);
+      }
+    });
+  }
 
   function parseDate(value) {
     if (!value) return null;
@@ -262,7 +336,7 @@
     const systemCard = `
       <article class="system-card">
         <p class="system-card__title">SYSTEM HEALTH / 系统健康</p>
-        <p class="system-card__big">${num(global.online_services)}<small> / ${num(global.total_services)}</small></p>
+        <p class="system-card__big" data-vk="sys-services" data-v="${num(global.online_services)}">${num(global.online_services)}<small> / ${num(global.total_services)}</small></p>
         <p class="system-card__state ${global.state === 'ok' ? '' : 'is-bad'}">${global.state === 'ok' ? 'ALL SERVICES NOMINAL' : 'ATTENTION REQUIRED'}</p>
         <div class="system-card__rows">
           <div class="system-card__row"><span>API 8642</span><span>${api.ok ? 'OK' : api.status || 'DOWN'}</span></div>
@@ -276,6 +350,7 @@
       </article>`;
 
     grid.innerHTML = cards + systemCard;
+    markFlash(grid);
   }
 
   /* --------------------------------------------------------------- services */
@@ -324,6 +399,7 @@
       host.innerHTML = `<p class="empty">活跃度不可用${data && data._warnings ? ' · ' + esc(data._warnings[0]) : ''}</p>`;
       $('#activity-total').textContent = '—';
       $('#activity-peak').textContent = '—';
+      state.activitySig = null;
       return;
     }
     const cells = data.cells;
@@ -333,23 +409,26 @@
     const max = Math.max(1, ...cells.map((c) => c.count));
     const byKey = new Map(cells.map((c) => [`${c.role}|${c.date}|${c.hour}`, c.count]));
 
-    host.innerHTML = roles.map((role) => {
+    const sig = sigOf([state.range, cells]);
+    const rebuild = sig !== state.activitySig;
+    if (rebuild) state.activitySig = sig;
+    if (rebuild) host.innerHTML = roles.map((role) => {
       const roleCells = cells.filter((c) => c.role === role);
       const total = roleCells.reduce((sum, c) => sum + c.count, 0);
       const hours = Array.from({ length: 24 }, (_, h) => {
         const label = [0, 6, 12, 18, 23].includes(h) ? String(h).padStart(2, '0') : '';
         return `<span class="heatmap__hour">${label}</span>`;
       }).join('');
-      const rows = dates.map((date) => {
+      const rows = dates.map((date, di) => {
         const row = Array.from({ length: 24 }, (_, hour) => {
           const count = byKey.get(`${role}|${date}|${hour}`) || 0;
           const alpha = count === 0 ? 0.03 : Math.max(0.1, Math.min(1, count / max));
-          return `<span class="heatmap__cell" style="--a:${alpha.toFixed(3)}" title="${esc(date)} ${String(hour).padStart(2, '0')}:00 · ${count} 条"></span>`;
+          return `<span class="heatmap__cell" style="--a:${alpha.toFixed(3)};--d:${di * 6 + hour * 16}ms" title="${esc(date)} ${String(hour).padStart(2, '0')}:00 · ${count} 条"></span>`;
         }).join('');
         return `<span class="heatmap__day">${dateLabel(date)}</span>${row}`;
       }).join('');
       return `
-        <div class="heatmap">
+        <div class="heatmap is-enter">
           <div class="heatmap__head">
             <p class="heatmap__name">${esc((ROLES[role] || { name: role }).name)}<span>${esc((ROLES[role] || { latin: role }).latin)}</span></p>
             <p class="heatmap__total">${num(total)} 条 / ${dates.length} 天</p>
@@ -360,9 +439,9 @@
         </div>`;
     }).join('');
 
-    $('#activity-total').textContent = num(data.total);
+    flashVal($('#activity-total'), num(data.total), 'activity-total');
     if (data.peak) {
-      $('#activity-peak').textContent = `${String(data.peak.hour).padStart(2, '0')}:00`;
+      flashVal($('#activity-peak'), `${String(data.peak.hour).padStart(2, '0')}:00`, 'activity-peak');
       $('#activity-peak-note').textContent = `${ROLES[data.peak.role]?.name || data.peak.role} · ${data.peak.date} · ${data.peak.count} 条`;
     } else {
       $('#activity-peak').textContent = '—';
@@ -376,9 +455,13 @@
     const data = payload && payload.data;
     const jobs = (data && data.jobs) || [];
     const timeline = $('#job-timeline');
+    const sig = sigOf(data);
+    const rebuild = !(sig && sig === state.jobsSig);
+    if (rebuild) state.jobsSig = sig;
     if (!jobs.length) {
       timeline.innerHTML = `<p class="empty">任务数据不可用</p>`;
       $('#jobs-body').innerHTML = `<tr><td colspan="8" class="empty">任务数据不可用</td></tr>`;
+      state.jobsSig = null;
       return;
     }
     const hours = Array.from({ length: 24 }, () => []);
@@ -388,16 +471,16 @@
       if (last) hours[last.getHours()].push({ job, kind: 'last' });
       if (next) hours[next.getHours()].push({ job, kind: 'next' });
     }
-    timeline.innerHTML = `
+    if (rebuild) timeline.innerHTML = `
       <div class="jt-grid">
         ${hours.map((items, hour) => `
           <div class="jt-hour">
             <span class="jt-hour__label">${String(hour).padStart(2, '0')}</span>
-            ${items.map(({ job, kind }) => {
+            ${items.map(({ job, kind }, idx) => {
               const cls = kind === 'next' ? 'jt-marker--next'
                 : job.result === 'failed' ? 'jt-marker--fail'
                 : job.result === 'silent' ? 'jt-marker--silent' : 'jt-marker--last';
-              return `<i class="jt-marker ${cls}" title="${esc(job.name)} · ${kind === 'next' ? '下次' : '上次'} ${hhmm(job.last_run || job.next_run)}"></i>`;
+              return `<i class="jt-marker ${cls}" style="--i:${idx}" title="${esc(job.name)} · ${kind === 'next' ? '下次' : '上次'} ${hhmm(job.last_run || job.next_run)}"></i>`;
             }).join('')}
           </div>`).join('')}
       </div>
@@ -408,7 +491,7 @@
         <span><i class="jt-marker--fail"></i>失败</span>
       </div>`;
 
-    $('#jobs-body').innerHTML = jobs.map((job) => `
+    if (rebuild) $('#jobs-body').innerHTML = jobs.map((job) => `
       <tr>
         <td>${esc(job.name)}</td>
         <td>${esc(job.owner || '—')}</td>
@@ -426,7 +509,7 @@
   }
 
   /* ----------------------------------------------------------------- errors */
-  function sparkline(values, { width = 300, height = 60, alertLast = false } = {}) {
+  function sparkline(values, { width = 300, height = 60, alertLast = false, animate = false } = {}) {
     if (!values.length) return '';
     const max = Math.max(1, ...values);
     const step = values.length > 1 ? width / (values.length - 1) : width;
@@ -438,9 +521,9 @@
     const line = points.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
     const area = `0,${height} ${line} ${width},${height}`;
     const last = points[points.length - 1];
-    return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="趋势图">
+    return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="趋势图" class="${animate ? 'is-draw' : ''}">
       <polygon points="${area}" fill="rgba(0,0,0,0.055)"></polygon>
-      <polyline points="${line}" fill="none" stroke="#000" stroke-width="1.4" vector-effect="non-scaling-stroke"></polyline>
+      <polyline points="${line}" fill="none" stroke="#000" stroke-width="1.4" vector-effect="non-scaling-stroke" pathLength="1"></polyline>
       <line x1="0" y1="${height - 1}" x2="${width}" y2="${height - 1}" stroke="rgba(0,0,0,.25)" stroke-width="1" vector-effect="non-scaling-stroke"></line>
       <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.4" fill="${alertLast ? '#c4001a' : '#000'}"></circle>
     </svg>`;
@@ -456,12 +539,17 @@
     const trend = data.trend || [];
     const today = data.total_hits ?? trend[trend.length - 1]?.count ?? 0;
     const yday = trend[trend.length - 2]?.count ?? 0;
-    $('#errors-total').textContent = num(today);
+    flashVal($('#errors-total'), num(today), 'errors-total');
     const delta = today - yday;
     $('#errors-delta').textContent = trend.length > 1
       ? `较昨日 ${delta > 0 ? '+' : ''}${num(delta)}`
       : '无趋势数据';
-    $('#error-spark').innerHTML = sparkline(trend.map((d) => d.count || 0), { alertLast: today > Math.max(5, yday * 1.8) });
+    const trendSig = sigOf(trend.map((d) => d.count || 0));
+    $('#error-spark').innerHTML = sparkline(trend.map((d) => d.count || 0), {
+      alertLast: today > Math.max(5, yday * 1.8),
+      animate: trendSig !== state.sparkSig,
+    });
+    state.sparkSig = trendSig;
 
     const approvals = data.approvals || {};
     const counts = approvals.counts || {};
@@ -474,13 +562,19 @@
     const sources = data.sources || [];
     $('#errors-source-count').textContent = `${sources.length} 源 · ${data.failed_sources?.length || 0} 源读取失败`;
     const max = Math.max(1, ...sources.map((s) => s.hits || 0));
-    $('#source-list').innerHTML = sources.length ? sources.map((s) => `
+    $('#source-list').innerHTML = sources.length ? sources.map((s) => {
+      const bar = s.hits === 0
+        ? `<i class="is-zero"></i>`
+        : `<i class="${s.failed ? 'is-fail' : ''}" data-w="${Math.max(3, (s.hits / max) * 100).toFixed(2)}%" data-key="src:${esc(s.slug)}"></i>`;
+      return `
       <div class="source-row">
         <span class="source-row__name" title="${esc(s.slug)}">${esc(s.slug)}</span>
-        <span class="source-row__bar"><i class="${s.hits === 0 ? 'is-zero' : s.failed ? 'is-fail' : ''}" style="width:${s.hits === 0 ? 100 : Math.max(3, (s.hits / max) * 100)}%"></i></span>
+        <span class="source-row__bar">${bar}</span>
         <span class="source-row__count">${num(s.hits)}</span>
         ${s.failed ? `<span class="source-row__error">读取失败：${esc(s.failed)}</span>` : ''}
-      </div>`).join('') : `<p class="empty">当日 groups.json 无错误源</p>`;
+      </div>`;
+    }).join('') : `<p class="empty">当日 groups.json 无错误源</p>`;
+    morphBars($('#source-list'));
 
     const items = approvals.items || [];
     $('#approvals-body').innerHTML = items.length ? items.map((a) => {
@@ -613,12 +707,14 @@
             <p class="quota__label">${esc(q.label)}</p>
             <p class="quota__windows">5H ${pct(q.rolling)} · 周 ${pct(q.weekly)} · 月 ${pct(q.monthly)} 已用</p>
           </div>
-          <div class="quota__pct ${low ? 'is-low' : ''}">${num(q.remaining)}<small>%</small></div>
+          <div class="quota__pct ${low ? 'is-low' : ''}" data-vk="quota:${esc(q.label)}" data-v="${num(q.remaining)}">${num(q.remaining)}<small>%</small></div>
         </div>
-        <div class="quota__bar"><i class="${low ? 'is-low' : ''}" style="width:${Math.max(1, q.remaining)}%"></i></div>
+        <div class="quota__bar"><i class="${low ? 'is-low' : ''}" data-w="${Math.max(1, q.remaining)}%" data-key="quota:${esc(q.label)}"></i></div>
         <p class="quota__reset">剩余 · 重置 ${q.resets_at ? esc(String(q.resets_at).slice(0, 10)) : '—'}</p>
       </div>`;
     }).join('') : `<p class="empty">未配置额度 key</p>`;
+    morphBars($('#quota-list'));
+    markFlash($('#quota-list'));
 
     const profiles = data.profiles || [];
     $('#usage-body').innerHTML = profiles.length ? profiles.map((p) => `
@@ -634,8 +730,10 @@
       </tr>`).join('') : `<tr><td colspan="8" class="empty">${esc(data.estimate_note || 'token 用量不可用')}</td></tr>`;
 
     const trend = data.cost_trend || [];
-    $('#cost-spark').innerHTML = trend.length ? sparkline(trend.map((d) => d.cost || 0), { width: 240, height: 34 }) : '';
-    $('#today-cost').textContent = data.today_cost_usd == null ? '—' : `$${Number(data.today_cost_usd).toFixed(2)}`;
+    const costSig = sigOf(trend.map((d) => d.cost || 0));
+    $('#cost-spark').innerHTML = trend.length ? sparkline(trend.map((d) => d.cost || 0), { width: 240, height: 34, animate: costSig !== state.costSig }) : '';
+    state.costSig = costSig;
+    flashVal($('#today-cost'), data.today_cost_usd == null ? '—' : `$${Number(data.today_cost_usd).toFixed(2)}`, 'today-cost');
     $('#usage-note').textContent = data.estimate_note || '';
   }
 
@@ -690,11 +788,11 @@
     const swap = data.swap || {};
     const disk = data.disk || {};
     const load = Array.isArray(data.load) ? data.load : null;
-    const meter = (label, value, note) => {
+    const meter = (label, value, note, key) => {
       const width = Number.isFinite(value) ? Math.max(1, Math.min(100, value)) : 1;
       return `<div class="host-meter">
         <div class="host-meter__top"><span>${esc(label)}</span><span class="tabular">${pct(value)}</span></div>
-        <div class="meter"><i class="${value > 85 ? 'is-high' : ''}" style="width:${width}%"></i></div>
+        <div class="meter"><i class="${value > 85 ? 'is-high' : ''}" data-w="${width}%" data-key="meter:${key}"></i></div>
         <span class="micro">${esc(note)}</span>
       </div>`;
     };
@@ -704,14 +802,15 @@
         <strong>${load ? `${load[0].toFixed(2)} ${load[1].toFixed(2)} ${load[2].toFixed(2)}` : '—'}</strong>
         <span class="host-note">${num(data.cores)} 核 · 开机 ${duration(data.uptime_seconds)}</span>
       </div>
-      ${meter('内存 / MEMORY', mem.used_pct, `已用 ${humanBytes(mem.total != null && mem.available != null ? mem.total - mem.available : null)} / ${humanBytes(mem.total)} · 可用 ${humanBytes(mem.available)}`)}
-      ${meter('SWAP', swap.used_pct, `${humanBytes(swap.used)} / ${humanBytes(swap.total)}`)}
-      ${meter('磁盘 / DISK', disk.percent, `${humanBytes(disk.used)} / ${humanBytes(disk.total)} · 剩余 ${humanBytes(disk.free)}`)}
+      ${meter('内存 / MEMORY', mem.used_pct, `已用 ${humanBytes(mem.total != null && mem.available != null ? mem.total - mem.available : null)} / ${humanBytes(mem.total)} · 可用 ${humanBytes(mem.available)}`, 'mem')}
+      ${meter('SWAP', swap.used_pct, `${humanBytes(swap.used)} / ${humanBytes(swap.total)}`, 'swap')}
+      ${meter('磁盘 / DISK', disk.percent, `${humanBytes(disk.used)} / ${humanBytes(disk.total)} · 剩余 ${humanBytes(disk.free)}`, 'disk')}
       <div class="host-row">
         <span>内核旋钮 / TUNING</span>
         <strong>swappiness ${data.swappiness ?? '—'} · ARENA ${data.malloc_arena_max ?? '—'}</strong>
         <span class="host-note">2G VPS 内存加固：低 swappiness + MALLOC_ARENA_MAX=2</span>
       </div>`;
+    morphBars(hostEl);
     const net = data.network || [];
     $('#reach-body').innerHTML = net.length ? net.map((n) => `
       <tr>
@@ -815,6 +914,7 @@
     if (state.loading) return;
     state.loading = true;
     $('#poll-state').textContent = 'SYNC…';
+    setPollLine(0);
 
     let overview = null;
     if (state.mode === null || state.mode === 'offline') {
@@ -876,6 +976,7 @@
     }
     if (state.loading) {
       el.textContent = 'SYNC…';
+      setPollLine(0);
       return;
     }
     if (!state.nextPollAt) {
@@ -884,6 +985,7 @@
     }
     const left = Math.max(0, Math.ceil((state.nextPollAt - Date.now()) / 1000));
     el.textContent = `AUTO 30S · ${left}s`;
+    setPollLine(1 - left / (POLL_MS / 1000));
   }
 
   /* ------------------------------------------------------------------- init */
@@ -935,6 +1037,9 @@
         $$('.index__link').forEach((link) => {
           link.classList.toggle('is-active', link.getAttribute('href') === `#${id}`);
         });
+        $$('.toc-rail__link').forEach((link) => {
+          link.classList.toggle('is-active', link.getAttribute('href') === `#${id}`);
+        });
       }
     }, { rootMargin: '-42% 0px -52% 0px' });
     $$('main .section').forEach((section) => observer.observe(section));
@@ -954,6 +1059,26 @@
   function init() {
     $('#built-at').textContent = `BUILD ${new Date().toISOString().slice(0, 10)}`;
     $('#clock').textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+    document.documentElement.classList.add('js-motion');
+    if (motionOK) {
+      const wm = $('.wordmark h1');
+      $$('.wm-l').forEach((span) => { span.dataset.ch = span.textContent; });
+      if (wm) {
+        wm.addEventListener('mouseenter', () => scramble(wm));
+        setTimeout(() => scramble(wm), 1200);
+      }
+      if ('IntersectionObserver' in window) {
+        const reveal = new IntersectionObserver((entries, obs) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            entry.target.classList.add('is-in');
+            obs.unobserve(entry.target);
+          }
+        }, { rootMargin: '0px 0px -6% 0px' });
+        $$('main .section').forEach((section) => reveal.observe(section));
+      }
+    }
+    setTimeout(() => { $$('main .section').forEach((section) => section.classList.add('is-in')); }, 2200);
     bind();
     refreshAll();
     connectLogs('hanbao');

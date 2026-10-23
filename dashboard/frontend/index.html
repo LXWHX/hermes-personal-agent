@@ -29,7 +29,7 @@
   </div>
 
   <div class="wordmark">
-    <h1>HERMES</h1>
+    <h1 aria-label="HERMES"><span class="wm-l" style="--i:0">H</span><span class="wm-l" style="--i:1">E</span><span class="wm-l" style="--i:2">R</span><span class="wm-l" style="--i:3">M</span><span class="wm-l" style="--i:4">E</span><span class="wm-l" style="--i:5">S</span></h1>
     <div class="wordmark__aside">
       <p class="kicker">AGENT CONTROL ROOM</p>
       <p class="cn">智能体监控台</p>
@@ -67,6 +67,8 @@
       <button type="button" class="range__btn is-active" data-range="7d">7D</button>
     </span>
   </nav>
+
+  <div class="poll-line" aria-hidden="true"><i id="poll-line-i"></i></div>
 </header>
 
 <main>
@@ -356,6 +358,20 @@
     </div>
   </section>
 </main>
+
+<nav class="toc-rail" aria-label="页面目录">
+  <a href="#roles" class="toc-rail__link is-active"><span class="toc-rail__num">01</span><span class="toc-rail__name">角色</span></a>
+  <a href="#services" class="toc-rail__link"><span class="toc-rail__num">02</span><span class="toc-rail__name">服务</span></a>
+  <a href="#activity" class="toc-rail__link"><span class="toc-rail__num">03</span><span class="toc-rail__name">活跃度</span></a>
+  <a href="#jobs" class="toc-rail__link"><span class="toc-rail__num">04</span><span class="toc-rail__name">任务</span></a>
+  <a href="#errors" class="toc-rail__link"><span class="toc-rail__num">05</span><span class="toc-rail__name">错误</span></a>
+  <a href="#board" class="toc-rail__link"><span class="toc-rail__num">06</span><span class="toc-rail__name">计划状态</span></a>
+  <a href="#outputs" class="toc-rail__link"><span class="toc-rail__num">07</span><span class="toc-rail__name">产出</span></a>
+  <a href="#usage" class="toc-rail__link"><span class="toc-rail__num">08</span><span class="toc-rail__name">额度</span></a>
+  <a href="#events" class="toc-rail__link"><span class="toc-rail__num">09</span><span class="toc-rail__name">事件</span></a>
+  <a href="#logs" class="toc-rail__link"><span class="toc-rail__num">10</span><span class="toc-rail__name">日志</span></a>
+  <a href="#system" class="toc-rail__link"><span class="toc-rail__num">11</span><span class="toc-rail__name">系统漂移</span></a>
+</nav>
 
 <footer class="footer">
   <div class="footer__col">

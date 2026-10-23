@@ -1184,3 +1184,171 @@ main { padding: 0 var(--pad); }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ------------------------------------------------------------------
+   MOTION LAYER — 2026-10-23
+   Additive only: no color / type / spacing / layout changes.
+   Vocabulary: steps() for mechanical state, --ease-mech for reveals;
+   ink/ground inversion only; red stays reserved for failure.
+   ------------------------------------------------------------------ */
+
+:root {
+  --ease-mech: cubic-bezier(0.16, 0.84, 0.28, 1);
+  --fast: 120ms;
+  --slow: 480ms;
+}
+
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } }
+@keyframes wm-rise { from { opacity: 0; transform: translateY(0.32em); } }
+@keyframes wipe-in { from { clip-path: inset(0 100% 0 0); } }
+@keyframes soft-in { from { opacity: 0; } }
+@keyframes val-flash {
+  0%, 55% { background: var(--ink); color: var(--ground); }
+  100% { background: transparent; color: inherit; }
+}
+@keyframes spark-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes cell-in { from { opacity: 0; transform: scaleY(0.35); } }
+@keyframes marker-in { from { opacity: 0; transform: scaleX(0.15); } }
+@keyframes raw-in { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes log-line-in { from { background: rgba(255, 255, 255, 0.16); } }
+
+/* load choreography + section reveal — one shot, JS-gated */
+@media (prefers-reduced-motion: no-preference) {
+  html.js-motion .rail { animation: fade-up var(--slow) var(--ease-mech) both; }
+  html.js-motion .wm-l {
+    display: inline-block;
+    animation: wm-rise 0.55s var(--ease-mech) both;
+    animation-delay: calc(0.06s + var(--i, 0) * 55ms);
+  }
+  html.js-motion .wordmark__aside { animation: fade-up var(--slow) var(--ease-mech) 0.3s both; }
+  html.js-motion .status-bar { animation: wipe-in 0.5s var(--ease-mech) 0.24s both; }
+  html.js-motion .index { animation: fade-up 0.4s var(--ease-mech) 0.36s both; }
+
+  html.js-motion main .section { opacity: 0; transform: translateY(10px); }
+  html.js-motion main .section.is-in {
+    opacity: 1;
+    transform: none;
+    transition: opacity 0.4s var(--ease-mech), transform 0.4s var(--ease-mech);
+  }
+}
+
+/* poll progress hairline (fills over each 30s round, resets on sync) */
+.poll-line { height: 2px; background: rgba(0, 0, 0, 0.12); }
+.poll-line i {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform 1s linear;
+}
+
+/* value change flash */
+.is-flash { animation: val-flash 0.55s steps(1, end) both; }
+
+/* data bars morph between polls */
+.source-row__bar i,
+.quota__bar i,
+.meter i { transition: width 0.55s var(--ease-mech); }
+
+/* sparkline draw-in, only when data changed */
+.spark svg.is-draw polyline {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: spark-draw 0.8s var(--ease-mech) forwards;
+}
+.spark svg.is-draw polygon { opacity: 0; animation: soft-in 0.4s var(--ease-mech) 0.35s forwards; }
+.spark circle { animation: pulse 2.6s steps(1, end) infinite; }
+
+/* heatmap entrance wave + hover magnify */
+.heatmap.is-enter .heatmap__cell {
+  animation: cell-in 0.3s var(--ease-mech) both;
+  animation-delay: var(--d, 0ms);
+}
+.heatmap__cell { transition: transform 90ms var(--ease-mech); }
+.heatmap__cell:hover { transform: scaleY(1.45); }
+
+/* job timeline markers */
+.jt-marker {
+  transform-origin: 0 50%;
+  animation: marker-in 0.25s var(--ease-mech) both;
+  animation-delay: calc(var(--i, 0) * 28ms);
+}
+
+/* log console: blinking cursor + new-line highlight */
+.log-console::after { content: "█"; color: #f2f2f2; animation: pulse 1.1s steps(1, end) infinite; }
+.log-line { animation: log-line-in 0.7s steps(1, end) both; }
+
+/* pointer feedback */
+.text-btn { transition: background var(--fast) linear, color var(--fast) linear; }
+.text-btn:active,
+.range__btn:active,
+.log-filter:active,
+.mute-btn:active { background: var(--ink); color: var(--ground); }
+.table tbody td { transition: background var(--fast) linear, border-color 0.14s var(--ease-mech); }
+.table tbody td:first-child { border-left: 2px solid transparent; padding-left: 6px; }
+.table tbody tr:hover td:first-child { border-left-color: var(--ink); }
+.index__link,
+.range__btn,
+.log-filter,
+.mute-btn { transition: border-bottom-color var(--fast) linear, color var(--fast) linear, background var(--fast) linear; }
+.error-item summary { transition: background var(--fast) linear; }
+.error-item summary:hover { background: var(--paper); }
+.error-item[open] .error-item__raw { animation: raw-in 0.22s var(--ease-mech) both; }
+.event { transition: opacity 0.2s var(--ease-mech); }
+.status-bar { transition: background 0.3s linear; }
+
+/* stroked numerals fill on hover */
+.output__num,
+.repo-card__commit { transition: color 0.22s var(--ease-mech); }
+.output:hover .output__num { color: var(--ink); }
+.output.is-failed:hover .output__num { color: var(--alert); }
+.repo-card:hover .repo-card__commit { color: var(--ink); }
+.output:hover .output__title { text-decoration: underline; text-underline-offset: 3px; }
+
+/* ------------------------------------------------------- toc side rail */
+.toc-rail {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 96px;
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 20px 0;
+  background: var(--ground);
+  border-left: 1px solid var(--line-strong);
+  z-index: 10;
+}
+.toc-rail__link {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 12px 5px 9px;
+  font-size: 9px;
+  line-height: 1.35;
+  letter-spacing: 0.06em;
+  color: var(--grey);
+  white-space: nowrap;
+  border-left: 2px solid transparent;
+  transition: background var(--fast) linear, color var(--fast) linear, border-color 0.14s var(--ease-mech);
+}
+.toc-rail__link:hover,
+.toc-rail__link:active { background: var(--ink); color: var(--ground); }
+.toc-rail__link.is-active { color: var(--ink); font-weight: 700; border-left-color: var(--ink); }
+.toc-rail__num { font-variant-numeric: tabular-nums; }
+.toc-rail__link:focus-visible { outline-offset: -3px; }
+
+/* reserve the side column so content rules butt into the rail hairline */
+@media (min-width: 1241px) {
+  body { padding-right: 96px; }
+  .toc-rail { display: flex; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html.js-motion .toc-rail { animation: toc-in 0.5s var(--ease-mech) 0.45s both; }
+}
+@keyframes toc-in { from { transform: translateX(100%); } }
