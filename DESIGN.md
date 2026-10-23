@@ -1,11 +1,11 @@
 # Hermes 可视化监控面板 — 设计与实施计划
 
-> 状态：**M1 内网已上线，M2 完成，M3 部分完成**（2026-10-22 立项、开发并部署；托管/访问方案定稿：Cloudflare Tunnel，见 §5）
+> 状态：**M1 内网已上线，M2 完成，M3 完成**（2026-10-22 立项、开发并部署；托管/访问方案定稿：Cloudflare Tunnel，见 §5）
 > 目标文件：`dashboard/`、`server/dashboard-deploy.sh`
-> 当前版本：commit `05ead9b`，systemd `hermes-dashboard` 已运行，仅绑 `127.0.0.1:8787`
+> 当前版本：commit `0c27f67`（2026-10-23 M3 收尾），systemd `hermes-dashboard` 已运行，仅绑 `127.0.0.1:8787`
 > 本文档是执行依据：模块清单、数据源、接口契约、分期任务、验收标准、上线记录与每日续跑清单都在这里。
 > 实现说明见 `dashboard/README.md`；本机演示：`HERMES_DASHBOARD_DEMO=1`。
-> 未完成：Cloudflare DNS/Tunnel/Access（需窗口期）、停服端到端演练；两个线上运维问题由老板另行修复（见 §12）。
+> 未完成：Cloudflare DNS/Tunnel/Access（需窗口期）、停服端到端演练。§12.3 三个线上问题均已修复关闭（2026-10-23 复核）。
 
 ---
 
@@ -177,6 +177,8 @@ crontab -l                  # digest 23:50 / game-news / game-trends / twitch / 
 | `GET /api/board` | 解析后的 PLAN/STATUS |
 | `GET /api/outputs` | 情报产出最近一期 + 投递结果 |
 | `GET /api/usage` | token/成本/额度 |
+| `GET /api/drift` | 仓库 HEAD/脏文件 + SOUL/config 线上副本 sha256 一致性 |
+| `GET /api/system` | 主机负载/内存/swap/磁盘/加固旋钮 + 出站可达探测 |
 | `GET /api/events` | 合并事件时间线 |
 | `GET /api/logs/stream` | SSE 实时日志（脱敏） |
 
@@ -260,7 +262,7 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
 ### M3 — 成本与实时
 - [x] `usage`（按 profile 的 token/成本，额度不可得时明确标注；**实测：token 真实，成本因订阅制无单价而标不可用**）
 - [x] SSE 日志流 + 脱敏
-- [ ] 配置漂移与系统资源
+- [x] 配置漂移与系统资源（2026-10-23：`drift.py` 比对 4 个 SOUL 副本 + config 模板；`system.py` /proc 指标 + 加固旋钮 + 4 路出站探测；实测 4 same + 1 template）
 - [x] 移动端适配（手机上也能看）
 
 ---
@@ -301,7 +303,7 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
 
 > 读 `docs/dashboard-plan.md`，先看 §12 上线记录和 §13 每日续跑清单，不要重做已完成模块。
 > 当前面板已在服务器 `hermes-dashboard` 上运行（仅 127.0.0.1:8787）。每天先做 §13 的例行核对，
-> 再处理未完成项：Cloudflare Tunnel / Access（必须约窗口期，见 §5）、停服演练、M3 配置漂移。
+> 再处理未完成项：Cloudflare Tunnel / Access（必须约窗口期，见 §5）、停服演练（M3 已于 2026-10-23 完成）。
 > 面板只读，任何 repair 动作走既有 runbook，不通过面板写线上状态；不要覆盖 `/root/hermes-board/`
 > 与 `/root/hermes-errors/`。改代码后按 §13.4 的发布流程走，并把结果补进 §12。
 > 遇到老板正在修的问题（§12.3）不要重复修，只记录状态。
@@ -337,11 +339,16 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
 
 ### 12.3 面板暴露出的真实问题（老板修复中，不属面板缺陷）
 
-1. **gateway 当天窗口外崩溃重启 5 次**（10:48、12:09、12:54 等）——需查 OOM / Discord WebSocket。
-2. **`repair-watcher.sh` 八进制 bug**：`line 52` 把 `08`/`09` 当八进制 → `NOW_MIN: unbound variable`，每 10 分钟空跑。
-3. **Twitch Drops** 2026-10-21 17:33 因 LLM 503 跳过，下一轮自然重试。
+1. **gateway 当天窗口外崩溃重启 5 次**（10:48、12:09、12:54 等）——✅ 已关闭：真相是
+   hermes 自动更新（v0.21.6→+406）与部署重启被旧分类逻辑误判；`2c434b8` 改三档分类
+   （只认 Scheduled restart 计数），另有 2G 内存加固 `bdcd0ce`（swappiness=10 +
+   MALLOC_ARENA_MAX=2）。2026-10-23 面板 crash=0。
+2. **`repair-watcher.sh` 八进制 bug**：`line 52` 把 `08`/`09` 当八进制 → `NOW_MIN: unbound variable`，每 10 分钟空跑——✅ 已修：`10#` 强制十进制，并加每小时一条
+   `[WATCHER_OK]` 成功心跳（面板不再长挂 failed）。
+3. **Twitch Drops** 2026-10-21 17:33 因 LLM 503 跳过——✅ 下轮自然恢复；另见 2026-10-23
+   老板在修的「黑盒图片漏发」（与面板无关）。
 
-> 这三项由老板直接修；面板已正确标红，不需要在 dashboard 代码里绕过或降级显示。
+> 面板当时正确标红，修复均在面板之外完成，dashboard 代码未绕过或降级显示。
 
 ### 12.4 本轮已修复的采集问题
 
@@ -376,6 +383,23 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
 | 5 | 外网不能直连 8787、前端无密钥 | **部分**（8787 外网超时、源码已脱敏；Tunnel/Access 未做） |
 | 6 | 单源故障不影响其他模块 | **本地已验证**（空数据下 9 个模块独立降级；生产当前全源健康） |
 
+### 12.7 M3 收尾上线（2026-10-23）
+
+- Commit `0c27f67`：新增 `collectors/drift.py`（仓库 ↔ 线上副本 sha256 一致性）与
+  `collectors/system.py`（/proc 主机指标 + 4 个出站探测），路由 `/api/drift`（缓存 60s）
+  与 `/api/system`（主机 20s / 探测 120s 分离缓存），前端新增 [11] 系统与配置区块，demo 同步。
+- 实测（12:17）：仓库 HEAD `0c27f67` dirty=0；4 个 SOUL 副本 `same`（heybox/biubiu 按
+  `SOUL.md + "\n\n" + PROFILE_EXTRA.md` 拼接比对成立）；config.yaml `template`（手工同步
+  模板，差异属预期）；1 核 / 负载 0.49 / 内存 45.7% / swap 15.2% / 磁盘 42.4% /
+  swappiness 10 / MALLOC_ARENA_MAX 2；Telegram·Discord·小黑盒·OpenCode 四路出站全部 200
+  （0.9–2.6s，东京单核冷连接正常水平）。
+- 出站探测口径：**拿到任何 HTTP 应答（含 4xx/5xx）即算可达**；只有超时/DNS/连接失败才标
+  DOWN。延迟为完整 TLS 建连 + 响应头耗时，非 ping。
+- 发布时注意：本地工作树有老板未提交的 Twitch Drops 黑盒图片修复 WIP（CHANGELOG /
+  phase-o / twitch-drops 三处），按「只暂存 dashboard → stash 其 WIP → rebase → pop」
+  流程避开，未动其内容。
+- §13.2 两项老板修复同日验证关闭（见 §12.3）。
+
 ---
 
 ## 13. 每日续跑清单（次日从这里开始）
@@ -388,6 +412,7 @@ systemctl is-active hermes-dashboard
 bash /root/HamburgerBao/server/dashboard-deploy.sh --check
 curl -s http://127.0.0.1:8787/api/overview | python3 -m json.tool | head -40
 curl -s http://127.0.0.1:8787/api/jobs | python3 -m json.tool | head -60
+curl -s http://127.0.0.1:8787/api/drift | python3 -m json.tool | head -20
 ```
 
 页面/接口重点看：
@@ -399,22 +424,25 @@ curl -s http://127.0.0.1:8787/api/jobs | python3 -m json.tool | head -60
 5. `usage.quota[].remaining` 是否低于 20%。
 6. 三个角色是否长时间 `silent`（2h 无消息）而服务仍 active。
 7. `warnings` 是否出现 `state.db`、`crontab`、`hermes cron` 读取失败。
+8. `drift` 中出现 `drift`/`missing` 状态（线上与仓库漂移，需重新部署对应脚本）；`system.network` 出现 DOWN（出站不可达）。
 
 > 面板本身只读。以上任何异常，修复动作走对应服务的既有 runbook，不通过面板写状态。
 
 ### 13.2 老板正在修的两项
 
-- [ ] gateway 窗口外崩溃：等老板修完 OOM/WS 后，确认 `errors.restarts.crash` 当天归零。
-- [ ] `repair-watcher.sh`：等老板修完八进制 bug 后，确认 `jobs` 里“修复 watcher”不再是 failed，且 watcher 日志不再出现 `NOW_MIN`。
-  - ⚠️ watcher 目前只在出错/点火时写日志，成功时完全静默。修好后若没有新的日志行，面板会一直停留在上一次 `failed`（按日志 mtime 判结果）。建议顺手加一条低频成功心跳（如每小时最多一行 `[WATCHER_OK]`），或修好后手动跑一次并留一行成功证据。
+- [x] gateway 窗口外崩溃：实为自动更新/部署重启误分类，`2c434b8` 修正三档分类 + `bdcd0ce`
+  内存加固；2026-10-23 `errors.restarts.crash` = 0（manual 2 为计划内部署重启）。
+- [x] `repair-watcher.sh`：八进制已修（`10#$(date +%H)`）+ 每小时一条 `[WATCHER_OK]`
+  成功心跳（2026-10-23 已有 3 条）；面板「修复 watcher」不再 failed。
 
-修复完成后，在本节打勾并更新 §12.3，不要重复修。
+两项均于 2026-10-23 复核关闭，详见 §12.3。
 
 ### 13.3 仍待执行（需窗口期）
 
 1. **停服演练**：`systemctl stop hermes-biubiu` → 30s 内页面变红 → `start` 恢复；完成后勾选 §7 M1 最后一项。
 2. **Cloudflare**：按 §5 顺序执行 DNS 记录抄全 → NS 迁移 → Tunnel → Access；不要跳过 DNSSEC 与 MX 检查。
-3. **M3 剩余**：配置漂移（SOUL.md / config.yaml / 部署 commit）与系统资源（CPU/内存/磁盘/网络）。
+
+（M3 配置漂移与系统资源已于 2026-10-23 上线，见 §12.7。）
 
 ### 13.4 改代码后的发布流程
 

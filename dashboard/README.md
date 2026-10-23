@@ -12,9 +12,10 @@
        systemd / journalctl / crontab / hermes-errors / hermes-board / state.db
 ```
 
-## 当前状态（2026-10-22）
+## 当前状态（2026-10-23）
 
 - 服务器内网已上线：`hermes-dashboard` active/enabled，仅 `127.0.0.1:8787`
+- M1–M3 全部完成：最新为配置漂移（`/api/drift`）与系统资源（`/api/system`），commit `0c27f67`
 - 外网未开放：`cloudflared` 未安装，DNS 尚未迁入 Cloudflare，`hermes.joeli.site` 不解析
 - 数据源已核对：6/6 服务、四个 profile 的 state.db、14 个错误源、approvals 计数一致
 - 详细验证数据、口径与每日检查清单见 [`docs/dashboard-plan.md` §12–§13](../docs/dashboard-plan.md)
@@ -79,12 +80,14 @@ Zero Trust 配置：
 | `GET /api/board` | PLAN.md / STATUS.md 解析结果 |
 | `GET /api/outputs` | 五类哨兵 + 早报 + digest 最近一期 |
 | `GET /api/usage` | OpenCode Go 三窗额度 + 本地 token 估算 |
+| `GET /api/drift` | 仓库 HEAD/脏文件 + SOUL/config 线上副本 sha256 一致性 |
+| `GET /api/system` | 主机负载/内存/swap/磁盘/加固旋钮 + 出站可达性 |
 | `GET /api/events` | 合并事件流 |
 | `GET /api/logs/stream?role=` | SSE 日志（脱敏，15s keepalive） |
 | `GET /api/logs/recent` | 日志快照（SSE 不可用时兜底） |
 
 单源失败只让对应模块返回 `{"error": ...}` 或空数据 + `warnings`，不影响整页。
-缓存默认 20s（`HERMES_DASHBOARD_TTL`），额度 60s。
+缓存默认 20s（`HERMES_DASHBOARD_TTL`），额度/漂移 60s，出站探测 120s。
 
 ## 采集器与数据源
 
@@ -98,6 +101,8 @@ Zero Trust 配置：
 | `outputs.py` | 哨兵日志 / state / drafts、cron 输出 | `[SILENT]` 与失败分开 |
 | `usage.py` | `https://opencode.ai/zen/go/v1/usage` + key | key 只在服务端读取，永不返回 |
 | `events.py` | 上述模块合并 | 静音仅写浏览器 localStorage |
+| `drift.py` | `git`（只读）+ 各部署落点 | 只比对 sha256 摘要与 mtime；config.yaml 为模板，差异属预期 |
+| `system.py` | `/proc`、`disk_usage`、4 个公网探测 | 4xx/5xx 也算可达；仅超时/DNS 失败算断 |
 
 ## 安全与脱敏
 
@@ -128,7 +133,7 @@ dashboard/
 │   ├── demo.py                # 明确标注的演示快照
 │   ├── build_demo.py          # 重新生成 frontend/demo-data.js
 │   ├── util.py                # 时间/子进程/脱敏
-│   └── collectors/            # services jobs errors board activity outputs usage events overview
+│   └── collectors/            # services jobs errors board activity outputs usage events overview drift system
 ├── frontend/
 │   ├── index.html
 │   ├── app.js                 # 轮询 / 渲染 / SSE / 静音
