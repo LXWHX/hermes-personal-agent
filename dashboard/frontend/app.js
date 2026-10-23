@@ -35,6 +35,9 @@
     loading: false,
     demo: false,
     mode: null,
+    viewer: 'owner',
+    logsStarted: false,
+    demoLoading: null,
     lastUpdate: null,
     nextPollAt: null,
     stamps: {},
@@ -335,6 +338,53 @@
     }
   }
 
+  const pollMs = () => (state.viewer === 'guest' ? 60000 : POLL_MS);
+
+  const GUEST_SECTIONS = ['services', 'errors', 'board', 'outputs', 'events', 'logs', 'system'];
+  const GUEST_NUMS = {
+    services: '02', errors: '05', board: '06', outputs: '07',
+    events: '09', logs: '10', system: '11',
+  };
+
+  /* Server-side gating is the real boundary; this only mirrors it in the DOM
+     (mosaic placeholders + locked index) — never blur real data after loading. */
+  function applyGuestView() {
+    document.body.classList.add('is-guest');
+    $$('.index__link, .toc-rail__link').forEach((link) => {
+      const id = String(link.getAttribute('href') || '').replace('#', '');
+      if (!GUEST_SECTIONS.includes(id)) return;
+      link.classList.add('is-locked');
+      link.setAttribute('aria-disabled', 'true');
+      link.removeAttribute('href');
+      if (link.classList.contains('index__link')) {
+        link.textContent = `${GUEST_NUMS[id]} ▓▓`;
+      } else {
+        const name = link.querySelector('.toc-rail__name');
+        if (name) name.textContent = '▓▓';
+      }
+    });
+    const services = $('#global-services');
+    const api = $('#global-api');
+    if (services) services.textContent = 'VISITOR';
+    if (api) api.textContent = '—';
+    updatePollLabel();
+  }
+
+  /* demo-data.js is 100 KB and only needed when the backend is unreachable. */
+  function loadDemoData() {
+    if (window.HERMES_DEMO) return Promise.resolve(true);
+    if (state.demoLoading) return state.demoLoading;
+    state.demoLoading = new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'demo-data.js';
+      script.async = true;
+      script.onload = () => resolve(Boolean(window.HERMES_DEMO));
+      script.onerror = () => resolve(false);
+      document.head.appendChild(script);
+    });
+    return state.demoLoading;
+  }
+
   async function load(key, url) {
     if (state.mode === 'demo') {
       const payload = await fetchJSON(url);
@@ -377,10 +427,16 @@
     const g = (overview && overview.global) || {};
     const bar = $('#global-bar');
     bar.dataset.state = g.state === 'ok' ? 'ok' : g.state === 'error' ? 'error' : 'degraded';
-    $('#global-state').textContent = g.label || '未知';
+    $('#global-state').textContent = g.label || (state.viewer === 'guest'
+      ? (g.state === 'ok' ? '全部正常' : '部分降级') : '未知');
     $('#global-note').textContent = g.note || '—';
-    $('#global-services').textContent = `${num(g.online_services)} / ${num(g.total_services)} 服务`;
-    $('#global-api').textContent = g.api_ok === true ? 'API 8642 OK' : g.api_ok === false ? 'API 8642 DOWN' : 'API 8642 —';
+    if (state.viewer === 'guest') {
+      $('#global-services').textContent = 'VISITOR';
+      $('#global-api').textContent = '—';
+    } else {
+      $('#global-services').textContent = `${num(g.online_services)} / ${num(g.total_services)} 服务`;
+      $('#global-api').textContent = g.api_ok === true ? 'API 8642 OK' : g.api_ok === false ? 'API 8642 DOWN' : 'API 8642 —';
+    }
     $('#global-updated').textContent = state.lastUpdate ? `UPDATED ${hhmmss(new Date(state.lastUpdate))}` : '—';
     setStamp('roles-stamp', payload);
   }
@@ -442,14 +498,14 @@
         <p class="system-card__big" data-vk="sys-services" data-v="${num(global.online_services)}">${num(global.online_services)}<small> / ${num(global.total_services)}</small></p>
         <p class="system-card__state ${global.state === 'ok' ? '' : 'is-bad'}">${global.state === 'ok' ? 'ALL SERVICES NOMINAL' : 'ATTENTION REQUIRED'}</p>
         <div class="system-card__rows">
-          <div class="system-card__row"><span>API 8642</span><span>${api.ok ? 'OK' : api.status || 'DOWN'}</span></div>
+          <div class="system-card__row"><span>API 8642</span><span>${state.viewer === 'guest' ? '—' : (api.ok ? 'OK' : api.status || 'DOWN')}</span></div>
           <div class="system-card__row"><span>待批 / 修复</span><span>${esc(openApprovals)}</span></div>
           <div class="system-card__row"><span>失败任务</span><span>${esc(failedJobs)}</span></div>
           <div class="system-card__row"><span>逾期计划</span><span>${esc(global.overdue_tasks ?? '—')}</span></div>
           <div class="system-card__row"><span>Gateway UP</span><span>${duration(gateway.uptime_seconds)}</span></div>
           <div class="system-card__row"><span>Gateway 重启</span><span>${num(gateway.restarts)}</span></div>
         </div>
-        <p class="system-card__foot">只读 / 30s 轮询<br>所有时间 Asia/Shanghai</p>
+        <p class="system-card__foot">只读 / ${state.viewer === 'guest' ? '60s' : '30s'} 轮询<br>所有时间 Asia/Shanghai</p>
       </article>`;
 
     grid.innerHTML = cards + systemCard;
@@ -458,6 +514,7 @@
 
   /* --------------------------------------------------------------- services */
   function renderServices(payload) {
+    if (state.viewer === 'guest') return;
     setStamp('services-stamp', payload);
     const data = payload && payload.data;
     if (!data) {
@@ -594,7 +651,11 @@
         <span><i class="jt-marker--fail"></i>失败</span>
       </div>`;
 
-    if (rebuild) $('#jobs-body').innerHTML = jobs.map((job) => `
+    if (rebuild) $('#jobs-body').innerHTML = jobs.map((job) => {
+      const summary = state.viewer === 'guest'
+        ? '<span class="redacted">▓▓▓</span>'
+        : esc(job.summary || '—');
+      return `
       <tr>
         <td>${esc(job.name)}</td>
         <td>${esc(job.owner || '—')}</td>
@@ -603,8 +664,9 @@
         <td class="num">${job.duration_s === null || job.duration_s === undefined ? '—' : `${job.duration_s}s`}</td>
         <td class="num">${job.next_run ? `${dateLabel(job.next_run)} ${hhmm(job.next_run)}` : '—'}</td>
         <td>${resultTag(job.result)}</td>
-        <td title="${esc(job.summary || '')}">${esc(job.summary || '—')}</td>
-      </tr>`).join('');
+        <td title="${state.viewer === 'guest' ? '' : esc(job.summary || '')}">${summary}</td>
+      </tr>`;
+    }).join('');
 
     const failed = jobs.filter((j) => j.result === 'failed').length;
     const silent = jobs.filter((j) => j.result === 'silent').length;
@@ -633,6 +695,7 @@
   }
 
   function renderErrors(payload) {
+    if (state.viewer === 'guest') return;
     setStamp('errors-stamp', payload);
     const data = payload && payload.data;
     if (!data) {
@@ -707,6 +770,7 @@
 
   /* ------------------------------------------------------------------ board */
   function renderBoard(payload) {
+    if (state.viewer === 'guest') return;
     setStamp('board-stamp', payload);
     const data = payload && payload.data;
     if (!data) {
@@ -756,6 +820,7 @@
 
   /* ---------------------------------------------------------------- outputs */
   function renderOutputs(payload) {
+    if (state.viewer === 'guest') return;
     setStamp('outputs-stamp', payload);
     const data = payload && payload.data;
     const items = (data && data.items) || [];
@@ -851,6 +916,7 @@
   }
 
   function renderDrift(payload) {
+    if (state.viewer === 'guest') return;
     const data = payload && payload.data;
     if (!data || data.error) {
       $('#repo-card').innerHTML = `<p class="empty">漂移数据不可用</p>`;
@@ -879,6 +945,7 @@
   }
 
   function renderSystem(payload) {
+    if (state.viewer === 'guest') return;
     setStamp('system-stamp', payload);
     const data = payload && payload.data;
     const hostEl = $('#host-rows');
@@ -931,6 +998,7 @@
   }
 
   function renderEvents(payload) {
+    if (state.viewer === 'guest') return;
     setStamp('events-stamp', payload);
     const data = payload && payload.data;
     const events = (data && data.events) || [];
@@ -979,8 +1047,8 @@
     status.textContent = '连接中';
     status.classList.remove('is-live');
 
-    if (state.demo) {
-      const lines = (window.HERMES_DEMO && window.HERMES_DEMO.logs) || [];
+    if (state.demo && window.HERMES_DEMO) {
+      const lines = (window.HERMES_DEMO.logs) || [];
       let i = 0;
       status.textContent = 'DEMO STREAM';
       status.classList.add('is-live');
@@ -1026,8 +1094,14 @@
         state.mode = probe.demo ? 'demo' : 'live';
         overview = probe;
         if (probe.demo) activateDemo();
+        if (probe.viewer === 'guest') {
+          state.viewer = 'guest';
+          applyGuestView();
+        }
       } else {
-        const fallback = demoPayload('overview');
+        // Only pull the 100 KB demo snapshot when the backend is unreachable.
+        const ready = await loadDemoData();
+        const fallback = ready ? demoPayload('overview') : null;
         if (fallback) {
           state.mode = 'demo';
           overview = fallback;
@@ -1038,18 +1112,19 @@
       }
     }
 
+    const guest = state.viewer === 'guest';
     const [overviewRes, services, jobs, activity, errors, board, outputs, usage, drift, system, events] = await Promise.all([
       overview ? Promise.resolve(overview) : load('overview', '/api/overview'),
-      load('services', '/api/services'),
+      guest ? null : load('services', '/api/services'),
       load('jobs', '/api/jobs'),
       load('activity', `/api/activity?range=${state.range}`),
-      load('errors', '/api/errors'),
-      load('board', '/api/board'),
-      load('outputs', '/api/outputs'),
+      guest ? null : load('errors', '/api/errors'),
+      guest ? null : load('board', '/api/board'),
+      guest ? null : load('outputs', '/api/outputs'),
       load('usage', '/api/usage'),
-      load('drift', '/api/drift'),
-      load('system', '/api/system'),
-      load('events', '/api/events'),
+      guest ? null : load('drift', '/api/drift'),
+      guest ? null : load('system', '/api/system'),
+      guest ? null : load('events', '/api/events'),
     ]);
 
     try { renderRoles(overviewRes && overviewRes.data, services && services.data, overviewRes); } catch (e) { console.error(e); }
@@ -1064,8 +1139,14 @@
     try { renderSystem(system); } catch (e) { console.error(e); }
     try { renderEvents(events); } catch (e) { console.error(e); }
 
+    // Never open the SSE stream for a guest (the server would 403 anyway).
+    if (!state.logsStarted && state.mode && state.viewer !== 'guest') {
+      state.logsStarted = true;
+      connectLogs(state.logRole);
+    }
+
     state.lastUpdate = Date.now();
-    state.nextPollAt = Date.now() + POLL_MS;
+    state.nextPollAt = Date.now() + pollMs();
     state.loading = false;
     $('#global-updated').textContent = `UPDATED ${hhmmss(new Date())}`;
     updatePollLabel();
@@ -1083,12 +1164,13 @@
       return;
     }
     if (!state.nextPollAt) {
-      el.textContent = 'AUTO 30S';
+      el.textContent = state.viewer === 'guest' ? 'AUTO 60S' : 'AUTO 30S';
       return;
     }
+    const total = pollMs() / 1000;
     const left = Math.max(0, Math.ceil((state.nextPollAt - Date.now()) / 1000));
-    el.textContent = `AUTO 30S · ${left}s`;
-    setPollLine(1 - left / (POLL_MS / 1000));
+    el.textContent = `AUTO ${total}S · ${left}s`;
+    setPollLine(1 - left / total);
   }
 
   /* ------------------------------------------------------------------- init */
@@ -1109,6 +1191,7 @@
 
     $$('.log-filter').forEach((btn) => {
       btn.addEventListener('click', () => {
+        if (state.viewer === 'guest') return;
         $$('.log-filter').forEach((b) => b.classList.toggle('is-active', b === btn));
         connectLogs(btn.dataset.logRole);
       });
@@ -1129,7 +1212,7 @@
     document.addEventListener('visibilitychange', () => {
       updatePollLabel();
       if (!document.hidden) {
-        if (!state.lastUpdate || Date.now() - state.lastUpdate > POLL_MS) refreshAll();
+        if (!state.lastUpdate || Date.now() - state.lastUpdate > pollMs()) refreshAll();
       }
     });
 
@@ -1187,7 +1270,6 @@
     setTimeout(() => { $$('main .section').forEach((section) => section.classList.add('is-in')); }, 2200);
     bind();
     refreshAll();
-    connectLogs('hanbao');
   }
 
   if (document.readyState === 'loading') {
