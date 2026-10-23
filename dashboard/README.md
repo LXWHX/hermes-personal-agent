@@ -61,6 +61,26 @@ systemd `cloudflared` active/enabled，4 条 QUIC 连接挂东京边缘。
 - 换 token：更新 `/etc/cloudflared/token` 后 `systemctl restart cloudflared`
 - 不开任何入站端口；`8787` 始终只绑 loopback
 
+### 访客视图（`hamburger.joeli.site`，2026-10-23）
+
+同一个进程、同一个端口，按 **Host 头** 在服务端裁剪，前端不做任何“先拿数据再 blur”。
+
+| 域名 | 访问策略 | 视图 |
+|---|---|---|
+| `hermes.joeli.site` | Cloudflare Access（邮箱 OTP，24h） | 全量 11 块 |
+| `hamburger.joeli.site` | Access `Bypass + Everyone` | 01 / 03 / 04 / 08 可见；其余 7 块 mosaic |
+
+- 可见：角色卡、活跃度、定时任务（摘要列打码 `▓▓▓`）、模型与额度。
+- 隐藏（403 + 马赛克）：`/api/services` `/api/errors` `/api/board` `/api/outputs`
+  `/api/drift` `/api/system` `/api/events` `/api/logs/recent` `/api/logs/stream`。
+- `overview` 的派生字段（服务数、API 探活、待批、逾期、角色 metrics、uptime）在
+  guest 下统一置空，避免从 01 绕过马赛克。
+- 配置：systemd `Environment=HERMES_DASHBOARD_GUEST_HOSTS=hamburger.joeli.site`
+  （逗号分隔可写多个；**留空 = 关闭访客视图**，所有 Host 都按 owner 处理）。
+- 临时关闭访客域名：删掉 Tunnel 的 Route，或把该 Access 应用改回 OTP；服务端无需改动。
+- 本地验样式：`HERMES_DASHBOARD_FORCE_VIEWER=guest HERMES_DASHBOARD_DEMO=1 python -m uvicorn app:app --port 8787`。
+- ⚠️ Tunnel Route 的 service 必须是 **HTTP `127.0.0.1:8787`**，写成 HTTPS 会 `Host Error`。
+
 ## 接口
 
 统一响应：

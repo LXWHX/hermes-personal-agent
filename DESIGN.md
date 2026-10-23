@@ -1,8 +1,9 @@
 # Hermes 可视化监控面板 — 设计与实施计划
 
-> 状态：**全部完成，外网已上线**（M1–M3 + 停服演练 + Cloudflare Tunnel/Access；2026-10-22 立项、2026-10-23 收官）
+> 状态：**全部完成，外网已上线**（M1–M3 + 停服演练 + Cloudflare Tunnel/Access + 访客视图；2026-10-22 立项、2026-10-23 收官）
 > 目标文件：`dashboard/`、`server/dashboard-deploy.sh`
-> 当前版本：commit `0c27f67`（M3 收尾），systemd `hermes-dashboard` + `cloudflared` 已运行；访问 `hermes.joeli.site`（Cloudflare Access，上线记录见 §12.9）
+> 当前版本：commit `0c27f67`（M3 收尾）+ 访客视图；systemd `hermes-dashboard` + `cloudflared` 已运行；
+> 老板 `hermes.joeli.site`（Cloudflare Access，§12.9），访客 `hamburger.joeli.site`（公开裁剪视图，§12.10）
 > 本文档是执行依据：模块清单、数据源、接口契约、分期任务、验收标准、上线记录与每日续跑清单都在这里。
 > 实现说明见 `dashboard/README.md`；本机演示：`HERMES_DASHBOARD_DEMO=1`。
 > 计划任务全部完成（2026-10-23）。日常只需 §13.1 例行核对；面板问题走既有 runbook。
@@ -429,7 +430,39 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
   bark-server，与本次无关）。cloudflared 经 pkg.cloudflare.com apt 源安装（2026.10.3）。
 - **既有观察（非本次问题，留档）**：`www.joeli.site` 证书不带 www SAN（迁移前如此：Vercel 边缘只发
   CN=joeli.site，忽略证书后 307 → apex）；要修在 Vercel 项目设置里把 www 加进域名列表即可。
+- **坑：Tunnel Route 的 service 必须是 HTTP**。新增 hostname 时把 service 写成 `https://localhost:8787`
+  会让 cloudflared 对源站发起 TLS 握手、页面报 `Host Error`，日志是
+  `tls: first record does not look like a TLS handshake`（2026-10-23 14:36 实测一次）。
+  正确写法：`HTTP` → `127.0.0.1:8787`。
 - **应急通道**：SSH 隧道仍可用（`ssh -L 8788:127.0.0.1:8787 root@<server>`），CF/Access 故障时用。
+
+### 12.10 访客视图（2026-10-23）
+
+- **两个域名**：`hermes.joeli.site`（老板，Access OTP，全量）与 `hamburger.joeli.site`
+  （访客，Access `Bypass + Everyone`，裁剪视图）。8787 仍只绑 loopback，外网只经 cloudflared。
+- **判定方式**：服务端 `util.viewer_for(request)` 只读 `Host` 头（剥端口、小写），
+  与 systemd 的 `HERMES_DASHBOARD_GUEST_HOSTS=hamburger.joeli.site` 比对，命中即 `guest`。
+  绝不接受 `?view=guest` 一类客户端参数。DEMO 默认 owner；本地可用
+  `HERMES_DASHBOARD_FORCE_VIEWER=guest` 看样式。
+- **安全前提**：8787 只绑 loopback 且只有 Cloudflare Tunnel 能进，`Host` 由边缘决定，客户端无法伪造成
+  owner 域名。**若以后在前面加反向代理，必须改用 `Cf-Access-Authenticated-User-Email` 或验 JWT。**
+- **可见**：01 角色、03 活跃度、04 定时任务、08 模型与额度。隐藏块（02/05/06/07/09/10/11）
+  在页面上显示为黑白 mosaic，导航项锁定为 `NN ▓▓`。
+- **字段级裁剪**（服务端完成，前端不 blur 真实数据）：
+  - `/api/overview`：`online_services/total_services/api_ok/overdue_tasks/open_approvals → null`；
+    `note` 固定「访客视图 · 部分模块隐藏」；`roles[].metrics → []`、`uptime_seconds → null`；
+    `global.state` 只看 `roles` 是否有 `offline`（`services` 仍内部读取用于重算角色状态，但不返回明细）。
+  - `/api/jobs`：保留名称/归属/计划/上次/耗时/下次/结果，`summary → null`（前端渲染 `▓▓▓`）。
+  - `/api/activity`、`/api/usage`：原样。
+  - `/health`：guest 时带 `"viewer": "guest"`。
+- **403 端点**：`/api/services`、`/api/errors`、`/api/board`、`/api/outputs`、`/api/drift`、
+  `/api/system`、`/api/events`、`/api/logs/recent`、`/api/logs/stream`；统一返回
+  `{"ok":false,"hidden":true,"viewer":"guest","error":"hidden_in_guest_view"}`。
+  中间件在路由前拦截，`/api/logs/stream` 不会创建任何生成器/线程。
+- **前端**：只探活一次 `/api/overview` 拿到 `viewer`，guest 只拉 overview/jobs/activity/usage
+  四个接口（60s 轮询），不建立 SSE；`demo-data.js` 改为离线时懒加载，首屏不再下载 103 KB。
+- **验收结果**：见 §13.1 的 guest 断言；完整矩阵在 `dashboard/README.md`。
+
 
 ---
 
@@ -456,6 +489,8 @@ curl -s http://127.0.0.1:8787/api/drift | python3 -m json.tool | head -20
 6. 三个角色是否长时间 `silent`（2h 无消息）而服务仍 active。
 7. `warnings` 是否出现 `state.db`、`crontab`、`hermes cron` 读取失败。
 8. `drift` 中出现 `drift`/`missing` 状态（线上与仓库漂移，需重新部署对应脚本）；`system.network` 出现 DOWN（出站不可达）。
+9. `hamburger.joeli.site` 无需登录即可打开、7 块 mosaic、导航 7 项锁定；两端 Host 断言见
+   `bash server/dashboard-deploy.sh --check` 的 `== guest view ==`（guest 403 / owner 200）。
 
 > 面板本身只读。以上任何异常，修复动作走对应服务的既有 runbook，不通过面板写状态。
 
