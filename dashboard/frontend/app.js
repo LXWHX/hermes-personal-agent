@@ -52,6 +52,7 @@
     statusPayloads: null,
     statusOpen: false,
     statusCloseTimer: 0,
+    motionPrimed: false,
   };
 
   const $ = (sel) => document.querySelector(sel);
@@ -215,6 +216,40 @@
       el.style.width = el.dataset.w;
       if (el.dataset.key) barPrev.set(el.dataset.key, el.dataset.w);
     });
+  }
+
+  /* charts + bars replay their entrance every time the section scrolls back in */
+  function replaySectionMotion(section) {
+    if (!section || !motionOK) return;
+    const bars = Array.from(section.querySelectorAll('.uptime, .source-row__bar i, .quota__bar i, .meter i'));
+    bars.forEach((el, i) => {
+      el.classList.remove('is-grow');
+      el.style.setProperty('--gi', String(i % 6));
+    });
+    const sparks = Array.from(section.querySelectorAll('.spark svg'));
+    sparks.forEach((svg) => svg.classList.remove('is-draw'));
+    const maps = Array.from(section.querySelectorAll('.heatmap'));
+    maps.forEach((map) => map.classList.remove('is-enter'));
+    if (!bars.length && !sparks.length && !maps.length) return;
+    void section.offsetWidth;
+    bars.forEach((el) => el.classList.add('is-grow'));
+    sparks.forEach((svg) => svg.classList.add('is-draw'));
+    maps.forEach((map) => map.classList.add('is-enter'));
+  }
+
+  function initSectionMotion() {
+    if (!motionOK || !('IntersectionObserver' in window)) return;
+    const shown = new WeakMap();
+    const io = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const was = shown.get(entry.target) === true;
+        if (!entry.isIntersecting) { shown.set(entry.target, false); continue; }
+        if (was) continue;
+        shown.set(entry.target, true);
+        replaySectionMotion(entry.target);
+      }
+    }, { threshold: 0.15, rootMargin: '0px 0px -8% 0px' });
+    $$('main .section').forEach((section) => io.observe(section));
   }
 
   /* numbers flash ink when the value changed since last poll */
@@ -1365,6 +1400,15 @@
     updateStatusPill();
     if (state.statusOpen) renderStatusPop(false);
     updatePollLabel();
+
+    /* first data paint: replay charts already on screen (the observer fired too early) */
+    if (motionOK && !state.motionPrimed) {
+      state.motionPrimed = true;
+      $$('main .section').forEach((section) => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top < window.innerHeight && rect.bottom > 0) replaySectionMotion(section);
+      });
+    }
   }
 
   function updatePollLabel() {
@@ -1464,6 +1508,7 @@
     initWipes();
     initReticle();
     initHeatColumns();
+    initSectionMotion();
     if (motionOK) {
       const wm = $('.wordmark h1');
       const wmSpans = $$('.wm-l');
@@ -1475,10 +1520,8 @@
         let replayTimer = 0;
         let scrambleTimer = 0;
 
+        /* replay only the glyph decode; the slide-up stays a one-shot on load */
         const play = (scrambleDelay) => {
-          wmSpans.forEach((span) => { span.style.animation = 'none'; });
-          void wm.offsetWidth;
-          wmSpans.forEach((span) => { span.style.removeProperty('animation'); });
           clearTimeout(scrambleTimer);
           scrambleTimer = setTimeout(() => scramble(wm), scrambleDelay);
         };

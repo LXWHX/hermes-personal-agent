@@ -570,7 +570,7 @@ main { padding: 0 var(--pad); }
 .state-tag--warn { background: var(--paper); }
 .state-tag--unknown { color: var(--grey); border-color: var(--line); }
 
-.uptime { display: flex; gap: 1px; min-width: 168px; height: 13px; }
+.uptime { display: flex; gap: 1px; width: 100%; min-width: 168px; height: 13px; }
 .uptime i {
   flex: 1;
   background: var(--ink);
@@ -1503,6 +1503,18 @@ main { padding: 0 var(--pad); }
 .source-row__bar i,
 .quota__bar i,
 .meter i { transition: width 0.55s var(--ease-mech); }
+
+/* bars + 24h band fill from the left each time their section returns */
+@keyframes bar-grow { from { transform: scaleX(0); } }
+.uptime.is-grow,
+.source-row__bar i.is-grow,
+.quota__bar i.is-grow,
+.meter i.is-grow {
+  transform-origin: 0 50%;
+  animation: bar-grow 0.7s var(--ease-mech) both;
+  animation-delay: calc(var(--gi, 0) * 60ms);
+}
+.uptime.is-grow { animation-duration: 0.9s; }
 
 /* sparkline draw-in, only when data changed */
 .spark svg.is-draw polyline {
