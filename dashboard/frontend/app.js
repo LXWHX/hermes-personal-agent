@@ -49,6 +49,9 @@
     jobsSig: null,
     sparkSig: null,
     costSig: null,
+    statusPayloads: null,
+    statusOpen: false,
+    statusCloseTimer: 0,
   };
 
   const $ = (sel) => document.querySelector(sel);
@@ -406,6 +409,7 @@
       el.title = stamp.warnings.join('\n');
       el.classList.toggle('is-stale', age !== null && age > 90);
     }
+    tickStatusPop();
   }
 
   /* ------------------------------------------------------------------ roles */
@@ -996,6 +1000,210 @@
     }).join('');
   }
 
+  /* ----------------------------------------------------------- system status */
+  function statusStripStates(units) {
+    const max = units.reduce((m, u) => Math.max(m, (u.segments || []).length), 0);
+    if (!max) return [];
+    const out = [];
+    for (let i = 0; i < max; i += 1) {
+      let down = false;
+      let unknown = false;
+      let seen = false;
+      for (const unit of units) {
+        const segment = (unit.segments || [])[i];
+        if (!segment) continue;
+        seen = true;
+        if (segment.up === false) down = true;
+        else if (segment.up !== true) unknown = true;
+      }
+      out.push(!seen ? 'unknown' : down ? 'down' : unknown ? 'unknown' : 'up');
+    }
+    return out;
+  }
+
+  function statusPct(states) {
+    if (!states.length) return null;
+    const up = states.filter((s) => s === 'up').length;
+    return Math.round((up / states.length) * 1000) / 10;
+  }
+
+  function statusModel() {
+    const payloads = state.statusPayloads || {};
+    const overview = payloads.overview || {};
+    const global = overview.global || {};
+    const services = payloads.services || {};
+    const units = Array.isArray(services.units) ? services.units : [];
+    const api = services.api || {};
+    const jobs = payloads.jobs || {};
+    const jobList = Array.isArray(jobs.jobs) ? jobs.jobs : null;
+    const gateway = units.find((u) => u.unit === 'hermes-gateway') || units[0] || {};
+    const aggregate = statusStripStates(units);
+    const gatewayStates = (gateway.segments || []).map((s) => s.up === true ? 'up' : s.up === false ? 'down' : 'unknown');
+    const total = global.total_services ?? units.length;
+    const online = global.online_services ?? units.filter((u) => u.active === 'active').length;
+    const overall = global.state === 'ok' ? 'ok'
+      : global.state === 'error' ? 'error'
+      : global.state === 'degraded' ? 'degraded'
+      : units.length ? (online === total ? 'ok' : 'degraded') : 'unknown';
+    const title = overall === 'ok' ? '系统运行正常'
+      : overall === 'error' ? '系统需要处理'
+      : overall === 'degraded' ? '部分服务降级'
+      : '等待数据';
+    const note = global.note || (total ? `${online} / ${total} 服务在线` : '正在读取数据源');
+    return {
+      overall,
+      title,
+      note,
+      hasData: Boolean(global.state || units.length),
+      online,
+      total,
+      aggregate,
+      gateway,
+      gatewayStates,
+      api,
+      failed: global.failed_jobs ?? (jobList ? jobList.filter((j) => j.result === 'failed').length : null),
+      approvals: global.open_approvals,
+      overdue: global.overdue_tasks,
+      updated: state.lastUpdate,
+    };
+  }
+
+  function statusStrip(states, animate) {
+    if (!states.length) return '<p class="sys-pop__row-note">暂无 24H 条带</p>';
+    return `<div class="sys-strip${animate ? ' is-animate' : ''}" aria-hidden="true">${
+      states.map((s, i) => `<i class="is-${s}" style="--i:${i}"></i>`).join('')
+    }</div>`;
+  }
+
+  function statusUpdatedText() {
+    return state.lastUpdate ? `更新于 ${relTime(new Date(state.lastUpdate))}` : '更新于 —';
+  }
+
+  function updateStatusPill() {
+    const pill = $('#sys-pill');
+    if (!pill) return;
+    const model = statusModel();
+    const fresh = Boolean(state.lastUpdate && Date.now() - state.lastUpdate < 90000);
+    pill.classList.toggle('is-stale', !fresh);
+    pill.classList.toggle('is-error', model.overall === 'error');
+    pill.classList.toggle('is-warn', model.overall === 'degraded');
+    pill.dataset.state = model.overall;
+    pill.title = `${model.title} · ${model.note}`;
+    const count = $('#sys-pill-count');
+    if (count) count.textContent = model.total ? `${model.online}/${model.total}` : '—';
+  }
+
+  function renderStatusPop(animate) {
+    const body = $('#sys-pop-body');
+    const pop = $('#sys-pop');
+    if (!body || !pop) return;
+    const model = statusModel();
+    pop.dataset.state = model.overall;
+    $('#sys-pop-title').textContent = model.title;
+    $('#sys-pop-note').textContent = model.note;
+    $('#sys-pop-updated').textContent = statusUpdatedText();
+
+    if (!model.hasData) {
+      body.innerHTML = '<p class="sys-pop__empty micro">等待数据源…</p>';
+      return;
+    }
+
+    const aggregatePct = statusPct(model.aggregate);
+    const gatewayPct = statusPct(model.gatewayStates);
+    const gateway = model.gateway;
+    const api = model.api;
+    const bad = (value) => Number(value) > 0 ? ' is-bad' : '';
+    body.innerHTML = `
+      <div class="sys-pop__row">
+        <div class="sys-pop__row-top">
+          <span class="sys-pop__row-name">服务健康 <span>SYSTEMD</span></span>
+          <span class="sys-pop__row-value">${aggregatePct == null ? '—' : `${aggregatePct}%`}</span>
+        </div>
+        <p class="sys-pop__row-note">${num(model.online)} / ${num(model.total)} 在线 · 24H</p>
+        ${statusStrip(model.aggregate, animate)}
+      </div>
+      ${gateway.unit ? `<div class="sys-pop__row">
+        <div class="sys-pop__row-top">
+          <span class="sys-pop__row-name">GATEWAY <span>${esc(gateway.label || gateway.unit)}</span></span>
+          <span class="sys-pop__row-value">${gatewayPct == null ? '—' : `${gatewayPct}%`}</span>
+        </div>
+        <p class="sys-pop__row-note">${esc(gateway.active || gateway.state || 'UNKNOWN')} · PID ${esc(gateway.pid || '—')} · ${esc(gateway.memory_human || '—')}</p>
+        ${statusStrip(model.gatewayStates, animate)}
+      </div>` : ''}
+      <div class="sys-pop__api">
+        <span>API ${esc(api.port || 8642)}</span>
+        <span class="${api.ok ? '' : 'is-bad'}">${api.ok ? `OK · ${api.latency_ms == null ? '—' : `${num(api.latency_ms)} ms`}` : `DOWN${api.status ? ` · ${esc(api.status)}` : ''}`}</span>
+      </div>
+      <div class="sys-pop__stats">
+        <div class="sys-pop__stat"><span class="micro">失败任务</span><strong class="${bad(model.failed)}">${num(model.failed)}</strong></div>
+        <div class="sys-pop__stat"><span class="micro">待批</span><strong>${num(model.approvals)}</strong></div>
+        <div class="sys-pop__stat"><span class="micro">逾期</span><strong class="${bad(model.overdue)}">${num(model.overdue)}</strong></div>
+        <div class="sys-pop__stat"><span class="micro">Gateway 重启</span><strong>${num(gateway.restarts)}</strong></div>
+      </div>`;
+  }
+
+  function openStatusPop() {
+    if (state.statusOpen) return;
+    const pop = $('#sys-pop');
+    const pill = $('#sys-pill');
+    if (!pop || !pill) return;
+    clearTimeout(state.statusCloseTimer);
+    state.statusOpen = true;
+    renderStatusPop(true);
+    pop.hidden = false;
+    pop.classList.remove('is-open');
+    void pop.offsetWidth;
+    pop.classList.add('is-open');
+    pill.setAttribute('aria-expanded', 'true');
+  }
+
+  function closeStatusPop() {
+    if (!state.statusOpen) return;
+    const pop = $('#sys-pop');
+    const pill = $('#sys-pill');
+    state.statusOpen = false;
+    if (pop) {
+      pop.classList.remove('is-open');
+      clearTimeout(state.statusCloseTimer);
+      state.statusCloseTimer = setTimeout(() => {
+        if (!state.statusOpen && pop) pop.hidden = true;
+      }, 180);
+    }
+    if (pill) pill.setAttribute('aria-expanded', 'false');
+  }
+
+  function tickStatusPop() {
+    const updated = $('#sys-pop-updated');
+    if (updated) updated.textContent = statusUpdatedText();
+    updateStatusPill();
+  }
+
+  function initStatusPop() {
+    const pill = $('#sys-pill');
+    const pop = $('#sys-pop');
+    const close = $('#sys-pop-close');
+    if (!pill || !pop) return;
+    pill.addEventListener('click', () => {
+      if (state.statusOpen) closeStatusPop();
+      else openStatusPop();
+    });
+    if (close) close.addEventListener('click', closeStatusPop);
+    const link = $('#sys-pop-link');
+    if (link) link.addEventListener('click', closeStatusPop);
+    document.addEventListener('pointerdown', (e) => {
+      if (!state.statusOpen) return;
+      if (pop.contains(e.target) || pill.contains(e.target)) return;
+      closeStatusPop();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && state.statusOpen) {
+        closeStatusPop();
+        pill.focus();
+      }
+    });
+    updateStatusPill();
+  }
+
   /* ------------------------------------------------------------------- logs */
   function appendLog(row) {
     const consoleEl = $('#log-console');
@@ -1123,10 +1331,17 @@
       connectLogs(state.logRole);
     }
 
+    state.statusPayloads = {
+      overview: overviewRes && overviewRes.data,
+      services: services && services.data,
+      jobs: jobs && jobs.data,
+    };
     state.lastUpdate = Date.now();
     state.nextPollAt = Date.now() + pollMs();
     state.loading = false;
     $('#global-updated').textContent = `UPDATED ${hhmmss(new Date())}`;
+    updateStatusPill();
+    if (state.statusOpen) renderStatusPop(false);
     updatePollLabel();
   }
 
@@ -1229,10 +1444,35 @@
     initHeatColumns();
     if (motionOK) {
       const wm = $('.wordmark h1');
-      $$('.wm-l').forEach((span) => { span.dataset.ch = span.textContent; });
+      const wmSpans = $$('.wm-l');
+      wmSpans.forEach((span) => { span.dataset.ch = span.textContent; });
       if (wm) {
-        wm.addEventListener('mouseenter', () => scramble(wm));
-        setTimeout(() => scramble(wm), 1200);
+        /* replay the wordmark rise + decode 5–15s after the last trigger */
+        const REPLAY_MIN_MS = 5000;
+        const REPLAY_MAX_MS = 15000;
+        let replayTimer = 0;
+        let scrambleTimer = 0;
+
+        const play = (scrambleDelay) => {
+          wmSpans.forEach((span) => { span.style.animation = 'none'; });
+          void wm.offsetWidth;
+          wmSpans.forEach((span) => { span.style.removeProperty('animation'); });
+          clearTimeout(scrambleTimer);
+          scrambleTimer = setTimeout(() => scramble(wm), scrambleDelay);
+        };
+
+        const schedule = () => {
+          clearTimeout(replayTimer);
+          const wait = REPLAY_MIN_MS + Math.random() * (REPLAY_MAX_MS - REPLAY_MIN_MS);
+          replayTimer = setTimeout(() => {
+            if (!document.hidden) play(360);
+            schedule();
+          }, wait);
+        };
+
+        wm.addEventListener('mouseenter', () => { play(0); schedule(); });
+        play(1200);
+        schedule();
       }
       if ('IntersectionObserver' in window) {
         const reveal = new IntersectionObserver((entries, obs) => {
@@ -1247,6 +1487,7 @@
     }
     setTimeout(() => { $$('main .section').forEach((section) => section.classList.add('is-in')); }, 2200);
     bind();
+    initStatusPop();
     refreshAll();
   }
 
