@@ -237,20 +237,40 @@
     maps.forEach((map) => map.classList.add('is-enter'));
   }
 
+  /* blank the section's charts again — rest state while fully off-screen */
+  function clearSectionMotion(section) {
+    section.classList.add('is-pending');
+    section.querySelectorAll('.uptime, .source-row__bar i, .quota__bar i, .meter i')
+      .forEach((el) => el.classList.remove('is-grow'));
+    section.querySelectorAll('.spark svg').forEach((svg) => svg.classList.remove('is-draw'));
+    section.querySelectorAll('.heatmap').forEach((map) => map.classList.remove('is-enter'));
+  }
+
   function initSectionMotion() {
     if (!motionOK || !('IntersectionObserver' in window)) return;
     const shown = new WeakMap();
-    const io = new IntersectionObserver((entries) => {
+    /* draw once a section has slid ~1/4 of the viewport in */
+    const draw = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         const was = shown.get(entry.target) === true;
         if (!entry.isIntersecting) { shown.set(entry.target, false); continue; }
         if (was) continue;
         shown.set(entry.target, true);
+        entry.target.classList.remove('is-pending');
         replaySectionMotion(entry.target);
       }
-    /* wait until a section has slid ~1/4 of the viewport in before the bars replay */
     }, { threshold: 0, rootMargin: '0px 0px -25% 0px' });
-    $$('main .section').forEach((section) => io.observe(section));
+    /* blank again only after the section has left the viewport entirely */
+    const clear = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) clearSectionMotion(entry.target);
+      }
+    }, { threshold: 0 });
+    $$('main .section').forEach((section) => {
+      section.classList.add('is-pending'); /* rest blank until first draw */
+      draw.observe(section);
+      clear.observe(section);
+    });
   }
 
   /* numbers flash ink when the value changed since last poll */

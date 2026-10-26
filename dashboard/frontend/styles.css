@@ -1516,6 +1516,17 @@ main { padding: 0 var(--pad); }
 }
 .uptime.is-grow { animation-duration: 0.9s; }
 
+/* pending rest state: charts hold their first frame until the section slides in;
+   going fully off-screen returns them to it */
+.is-pending .uptime,
+.is-pending .source-row__bar i,
+.is-pending .quota__bar i,
+.is-pending .meter i { transform-origin: 0 50%; transform: scaleX(0); }
+.is-pending .spark svg polyline { stroke-dasharray: 1; stroke-dashoffset: 1; }
+.is-pending .spark svg polygon { opacity: 0; }
+.is-pending .spark svg circle { animation: none; opacity: 0; }
+.is-pending .heatmap__cell { opacity: 0; }
+
 /* sparkline draw-in, only when data changed */
 .spark svg.is-draw polyline {
   stroke-dasharray: 1;
