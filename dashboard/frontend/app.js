@@ -248,7 +248,8 @@
         shown.set(entry.target, true);
         replaySectionMotion(entry.target);
       }
-    }, { threshold: 0.15, rootMargin: '0px 0px -8% 0px' });
+    /* wait until a section has slid ~1/4 of the viewport in before the bars replay */
+    }, { threshold: 0, rootMargin: '0px 0px -25% 0px' });
     $$('main .section').forEach((section) => io.observe(section));
   }
 
@@ -1514,29 +1515,37 @@
       const wmSpans = $$('.wm-l');
       wmSpans.forEach((span) => { span.dataset.ch = span.textContent; });
       if (wm) {
-        /* replay the wordmark rise + decode 5–15s after the last trigger */
         const REPLAY_MIN_MS = 5000;
         const REPLAY_MAX_MS = 15000;
         let replayTimer = 0;
         let scrambleTimer = 0;
 
-        /* replay only the glyph decode; the slide-up stays a one-shot on load */
+        /* hover replays the glyph decode only */
         const play = (scrambleDelay) => {
           clearTimeout(scrambleTimer);
           scrambleTimer = setTimeout(() => scramble(wm), scrambleDelay);
+        };
+
+        /* full entrance = slide-up (wm-rise restart) + decode overlapping it */
+        const entrance = () => {
+          wmSpans.forEach((span) => { span.style.animation = 'none'; });
+          void wm.offsetWidth;
+          wmSpans.forEach((span) => { span.style.animation = ''; });
+          play(120);
         };
 
         const schedule = () => {
           clearTimeout(replayTimer);
           const wait = REPLAY_MIN_MS + Math.random() * (REPLAY_MAX_MS - REPLAY_MIN_MS);
           replayTimer = setTimeout(() => {
-            if (!document.hidden) play(360);
+            if (!document.hidden) entrance();
             schedule();
           }, wait);
         };
 
         wm.addEventListener('mouseenter', () => { play(0); schedule(); });
-        play(1200);
+        /* on load the CSS wm-rise is already running; just overlap the decode */
+        play(120);
         schedule();
       }
       if ('IntersectionObserver' in window) {
