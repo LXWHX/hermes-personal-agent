@@ -423,11 +423,14 @@
     sparks.forEach((svg) => svg.classList.remove('is-draw'));
     const maps = Array.from(section.querySelectorAll('.heatmap'));
     maps.forEach((map) => map.classList.remove('is-enter'));
-    if (!bars.length && !sparks.length && !maps.length) return;
+    const grids = Array.from(section.querySelectorAll('.jt-grid'));
+    grids.forEach((grid) => grid.classList.remove('is-enter'));
+    if (!bars.length && !sparks.length && !maps.length && !grids.length) return;
     void section.offsetWidth;
     bars.forEach((el) => el.classList.add('is-grow'));
     sparks.forEach((svg) => svg.classList.add('is-draw'));
     maps.forEach((map) => map.classList.add('is-enter'));
+    grids.forEach((grid) => grid.classList.add('is-enter'));
   }
 
   /* blank the section's charts again — rest state while fully off-screen */
@@ -437,6 +440,7 @@
       .forEach((el) => el.classList.remove('is-grow'));
     section.querySelectorAll('.spark svg').forEach((svg) => svg.classList.remove('is-draw'));
     section.querySelectorAll('.heatmap').forEach((map) => map.classList.remove('is-enter'));
+    section.querySelectorAll('.jt-grid').forEach((grid) => grid.classList.remove('is-enter'));
   }
 
   function initSectionMotion() {
@@ -867,7 +871,7 @@
       if (next) hours[next.getHours()].push({ job, kind: 'next' });
     }
     if (rebuild) timeline.innerHTML = `
-      <div class="jt-grid">
+      <div class="jt-grid is-enter">
         ${hours.map((items, hour) => `
           <div class="jt-hour">
             <span class="jt-hour__label">${String(hour).padStart(2, '0')}</span>
@@ -878,7 +882,7 @@
               const when = kind === 'next'
                 ? `下次 ${hhmm(job.next_run)}`
                 : `上次 ${hhmm(job.last_run)}${job.result ? ` · ${resultText(job.result)}` : ''}`;
-              return `<i class="jt-marker ${cls}" style="--i:${idx}" data-tip="${esc(job.name)} · ${when}"></i>`;
+              return `<i class="jt-marker ${cls}" style="--d:${hour * 26 + idx * 40}ms" data-tip="${esc(job.name)} · ${when}"></i>`;
             }).join('')}
           </div>`).join('')}
       </div>

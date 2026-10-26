@@ -1559,6 +1559,7 @@ main { padding: 0 var(--pad); }
 .is-pending .spark svg polygon { opacity: 0; }
 .is-pending .spark svg circle { animation: none; opacity: 0; }
 .is-pending .heatmap__cell { opacity: 0; }
+.is-pending .jt-marker { opacity: 0; }
 
 /* sparkline draw-in, only when data changed */
 .spark svg.is-draw polyline {
@@ -1575,11 +1576,13 @@ main { padding: 0 var(--pad); }
   animation-delay: var(--d, 0ms);
 }
 
-/* job timeline markers */
-.jt-marker {
-  transform-origin: 0 50%;
+/* job timeline: markers sweep in from the left each time the section
+   returns (is-enter lifecycle shared with the heatmap cells); --d is set
+   per marker (hour + slot) so the 24 columns fill left to right */
+.jt-marker { transform-origin: 0 50%; }
+.jt-grid.is-enter .jt-marker {
   animation: marker-in 0.25s var(--ease-mech) both;
-  animation-delay: calc(var(--i, 0) * 28ms);
+  animation-delay: var(--d, 0ms);
 }
 
 /* log console: blinking cursor + new-line highlight */
