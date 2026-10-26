@@ -1178,11 +1178,33 @@
     updateStatusPill();
   }
 
+  function placeStatusWrap() {
+    const wrap = $('.sys-wrap');
+    const rail = $('.toc-rail');
+    const foot = $('.footer__col--right');
+    if (!wrap || !rail || !foot) return;
+    const wide = window.matchMedia('(min-width: 1241px)').matches;
+    const host = wide ? rail : foot;
+    if (wrap.parentElement !== host) {
+      if (wide) rail.appendChild(wrap);
+      else foot.insertBefore(wrap, foot.firstChild);
+    }
+    wrap.classList.toggle('sys-wrap--rail', wide);
+  }
+
   function initStatusPop() {
     const pill = $('#sys-pill');
     const pop = $('#sys-pop');
     const close = $('#sys-pop-close');
     if (!pill || !pop) return;
+    placeStatusWrap();
+    const mq = window.matchMedia('(min-width: 1241px)');
+    const onMq = () => {
+      closeStatusPop();
+      placeStatusWrap();
+    };
+    if (mq.addEventListener) mq.addEventListener('change', onMq);
+    else if (mq.addListener) mq.addListener(onMq);
     pill.addEventListener('click', () => {
       if (state.statusOpen) closeStatusPop();
       else openStatusPop();

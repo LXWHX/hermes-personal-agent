@@ -1120,11 +1120,17 @@ main { padding: 0 var(--pad); }
   text-transform: uppercase;
 }
 
-/* system status: footer pill + inspection popover */
+/* system status: toc-rail pill + inspection popover */
 .sys-wrap {
   position: relative;
   display: inline-block;
   margin-bottom: 18px;
+}
+.sys-wrap--rail {
+  display: block;
+  margin: 12px 9px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
 }
 .sys-pill {
   display: inline-flex;
@@ -1284,13 +1290,13 @@ main { padding: 0 var(--pad); }
 }
 .sys-strip {
   display: flex;
-  gap: 1px;
+  gap: 2px;
   height: 15px;
   margin-top: 7px;
 }
 .sys-strip i {
   flex: 1 1 0;
-  min-width: 1px;
+  min-width: 2px;
   background: var(--ink);
   transform-origin: 50% 100%;
 }
@@ -1587,6 +1593,29 @@ main { padding: 0 var(--pad); }
 .toc-rail__num { font-variant-numeric: tabular-nums; }
 .toc-rail__link:focus-visible { outline-offset: -3px; }
 
+/* system status entry tucked under the page directory */
+.sys-wrap--rail .sys-pill {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 6px;
+  width: 100%;
+  padding: 6px;
+  border-color: var(--line);
+  text-align: left;
+}
+.sys-wrap--rail .sys-pill__count {
+  flex: 1 0 100%;
+  padding: 3px 0 0;
+  border-left: 0;
+  border-top: 1px solid currentColor;
+}
+.sys-wrap--rail .sys-pop {
+  right: calc(100% + 21px);
+  bottom: 0;
+  transform-origin: 100% 100%;
+}
+
 /* reserve the side column so content rules butt into the rail hairline */
 @media (min-width: 1241px) {
   body { padding-right: 96px; }
@@ -1614,7 +1643,7 @@ html.cursor-on .reticle { display: block; }
 .reticle__x,
 .reticle__y {
   position: fixed;
-  z-index: 60;
+  z-index: 200;
   background: rgba(0, 0, 0, 0.16);
   opacity: 0;
   transition: opacity 0.2s linear;
@@ -1626,7 +1655,7 @@ html.cursor-on .reticle { display: block; }
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 61;
+  z-index: 201;
   padding: 2px 6px;
   background: var(--ink);
   color: var(--ground);
