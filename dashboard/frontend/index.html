@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>HERMES — 智能体监控台</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="styles.css?v=20261026h">
+<link rel="stylesheet" href="styles.css?v=20261026j">
 </head>
 <body>
 <div id="demo-banner" class="demo-banner" hidden>
@@ -146,8 +146,33 @@
       <p class="section-note">24 小时时间轴。空心为下次，实心为上次；红点即失败。</p>
       <span class="stamp" id="jobs-stamp">—</span>
     </div>
-    <div class="job-timeline" id="job-timeline" aria-label="24 小时任务时间轴">
-      <p class="empty">读取任务…</p>
+    <div class="job-timeline" id="job-timeline" aria-label="24 小时任务时间轴" aria-busy="true">
+      <div class="jt-grid jt-grid--sk" aria-hidden="true">
+        <div class="jt-hour jt-hour--sk" style="--i:0"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:1"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:2"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:3"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:4"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:5"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:6"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:7"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:8"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:9"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:10"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:11"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:12"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:13"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:14"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:15"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:16"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:17"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:18"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:19"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:20"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:21"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:22"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+        <div class="jt-hour jt-hour--sk" style="--i:23"><i class="jt-sk"></i><i class="jt-sk"></i></div>
+      </div>
     </div>
     <div class="table-wrap">
       <table class="table table--jobs">
@@ -419,6 +444,6 @@
   <span class="reticle__tag">X ---- · Y ----</span>
 </div>
 
-<script src="app.js?v=20261026h"></script>
+<script src="app.js?v=20261026j"></script>
 </body>
 </html>

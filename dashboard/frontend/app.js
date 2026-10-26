@@ -204,8 +204,158 @@
     host.addEventListener('pointerleave', clear);
   }
 
+  /* uptime wave: the hovered band's segments ride a cosine wave — the
+     segment under the pointer lifts highest, neighbours fall off */
+  function initUptimeWave() {
+    if (!FINE || !motionOK) return;
+    const host = $('#services-body');
+    if (!host) return;
+    const RADIUS = 4.5; /* segments */
+    let band = null;
+    let raf = 0, px = 0;
+    const settle = () => {
+      raf = 0;
+      if (!band || !band.isConnected) { band = null; return; }
+      const rect = band.getBoundingClientRect();
+      const t = Math.max(rect.left, Math.min(px, rect.right));
+      const pos = ((t - rect.left) / Math.max(1, rect.width)) * band.children.length - 0.5;
+      Array.from(band.children).forEach((seg, i) => {
+        const d = Math.abs(i - pos);
+        const f = d >= RADIUS ? 0 : Math.cos((d / RADIUS) * Math.PI / 2);
+        seg.style.transform = f > 0.02 ? `scaleY(${(1 + f * 0.75).toFixed(3)})` : '';
+      });
+    };
+    const calm = () => {
+      if (band) Array.from(band.children).forEach((seg) => { seg.style.transform = ''; });
+      band = null;
+    };
+    host.addEventListener('pointermove', (e) => {
+      const cell = e.target instanceof Element ? e.target.closest('.uptime-cell') : null;
+      const next = cell ? cell.querySelector('.uptime') : null;
+      if (next !== band) { calm(); band = next; }
+      if (!band) return;
+      px = e.clientX;
+      if (!raf) raf = requestAnimationFrame(settle);
+    });
+    host.addEventListener('pointerleave', calm);
+  }
+
+  /* heatmap lens: cells bulge in a smooth ridge around the pointer — cell
+     centres are cached on map enter, --f set from pixel distance */
+  function initHeatLens() {
+    if (!FINE || !motionOK) return;
+    const host = $('#heatmaps');
+    if (!host) return;
+    const RADIUS = 56; /* px */
+    let map = null, cells = [], lit = [];
+    let raf = 0, px = 0, py = 0;
+    const settle = () => {
+      raf = 0;
+      if (!map || !map.isConnected) { rest(); return; }
+      const keep = [];
+      for (const cell of cells) {
+        const dx = cell.cx - px, dy = cell.cy - py;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        let f = 0;
+        if (d < RADIUS) {
+          f = 1 - d / RADIUS;
+          f = f * f * (3 - 2 * f); /* smoothstep, no pop at the rim */
+        }
+        if (f > 0.015) {
+          cell.el.style.setProperty('--f', f.toFixed(3));
+          keep.push(cell);
+        } else if (cell.el.style.getPropertyValue('--f')) {
+          cell.el.style.removeProperty('--f');
+        }
+      }
+      lit = keep;
+    };
+    const rest = () => {
+      lit.forEach((cell) => cell.el.style.removeProperty('--f'));
+      lit = [];
+      map = null;
+      cells = [];
+    };
+    host.addEventListener('pointerover', (e) => {
+      const body = e.target instanceof Element ? e.target.closest('.heatmap__body') : null;
+      const next = body ? body.closest('.heatmap') : null;
+      if (next === map) return;
+      rest();
+      map = next;
+      if (!map) return;
+      cells = Array.from(map.querySelectorAll('.heatmap__cell')).map((el) => {
+        const r = el.getBoundingClientRect();
+        return { el, cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+      });
+    });
+    host.addEventListener('pointermove', (e) => {
+      if (!map) return;
+      px = e.clientX;
+      py = e.clientY;
+      if (!raf) raf = requestAnimationFrame(settle);
+    });
+    host.addEventListener('pointerleave', rest);
+    /* any scroll (window or the heatmap's own overflow-x) stalemates the
+       cached centres — drop the lens and let the next enter rebuild */
+    window.addEventListener('scroll', () => { if (map) rest(); }, { passive: true });
+    host.addEventListener('scroll', () => { if (map) rest(); }, { passive: true, capture: true });
+  }
+
+  /* job timeline wave: hour columns ride the same ridge in column space —
+     --f on the column (markers inherit), nearest column flagged is-peak */
+  function initJobWave() {
+    if (!FINE || !motionOK) return;
+    const host = $('#job-timeline');
+    if (!host) return;
+    const RADIUS = 2.5; /* hour columns */
+    let grid = null, cols = [], peak = null;
+    let raf = 0, px = 0;
+    const settle = () => {
+      raf = 0;
+      if (!grid || !grid.isConnected) { rest(); return; }
+      const rect = grid.getBoundingClientRect();
+      const t = Math.max(rect.left, Math.min(px, rect.right));
+      const pos = ((t - rect.left) / Math.max(1, rect.width)) * cols.length - 0.5;
+      let best = -1, bestD = 1e9;
+      cols.forEach((col, i) => {
+        const d = Math.abs(i - pos);
+        const f = d >= RADIUS ? 0 : Math.cos((d / RADIUS) * Math.PI / 2);
+        col.style.setProperty('--f', f > 0.02 ? f.toFixed(3) : '0');
+        if (d < bestD) { bestD = d; best = i; }
+      });
+      const nextPeak = best >= 0 ? cols[best] : null;
+      if (peak !== nextPeak) {
+        if (peak) peak.classList.remove('is-peak');
+        peak = nextPeak;
+        if (peak) peak.classList.add('is-peak');
+      }
+    };
+    const rest = () => {
+      cols.forEach((col) => {
+        col.style.removeProperty('--f');
+        col.classList.remove('is-peak');
+      });
+      cols = [];
+      grid = null;
+      peak = null;
+    };
+    host.addEventListener('pointerover', (e) => {
+      const next = e.target instanceof Element ? e.target.closest('.jt-grid:not(.jt-grid--sk)') : null;
+      if (next === grid) return;
+      rest();
+      grid = next;
+      if (grid) cols = Array.from(grid.querySelectorAll(':scope > .jt-hour'));
+    });
+    host.addEventListener('pointermove', (e) => {
+      if (!grid) return;
+      px = e.clientX;
+      if (!raf) raf = requestAnimationFrame(settle);
+    });
+    host.addEventListener('pointerleave', rest);
+  }
+
   /* floating tip pinned to the cursor for [data-tip] carriers (uptime band,
-     heatmap cells) — replaces the native title popup */
+     heatmap cells, job markers) — replaces the native title popup */
   function initCursorTip() {
     if (!FINE) return;
     const tip = document.createElement('div');
@@ -215,10 +365,11 @@
     let carrier = null;
     const place = (e) => {
       const r = tip.getBoundingClientRect();
+      /* top-right of the cursor — the reticle readout owns the bottom-right */
       let x = e.clientX + 14;
-      let y = e.clientY + 16;
+      let y = e.clientY - r.height - 14;
       if (x + r.width > window.innerWidth - 8) x = e.clientX - r.width - 14;
-      if (y + r.height > window.innerHeight - 8) y = e.clientY - r.height - 16;
+      if (y < 8) y = e.clientY + 20;
       tip.style.transform = `translate(${x}px, ${y}px)`;
     };
     const hide = () => {
@@ -702,10 +853,12 @@
     if (rebuild) state.jobsSig = sig;
     if (!jobs.length) {
       timeline.innerHTML = `<p class="empty">任务数据不可用</p>`;
+      timeline.setAttribute('aria-busy', 'false');
       $('#jobs-body').innerHTML = `<tr><td colspan="8" class="empty">任务数据不可用</td></tr>`;
       state.jobsSig = null;
       return;
     }
+    timeline.setAttribute('aria-busy', 'false');
     const hours = Array.from({ length: 24 }, () => []);
     for (const job of jobs) {
       const last = parseDate(job.last_run);
@@ -722,7 +875,10 @@
               const cls = kind === 'next' ? 'jt-marker--next'
                 : job.result === 'failed' ? 'jt-marker--fail'
                 : job.result === 'silent' ? 'jt-marker--silent' : 'jt-marker--last';
-              return `<i class="jt-marker ${cls}" style="--i:${idx}" title="${esc(job.name)} · ${kind === 'next' ? '下次' : '上次'} ${hhmm(job.last_run || job.next_run)}"></i>`;
+              const when = kind === 'next'
+                ? `下次 ${hhmm(job.next_run)}`
+                : `上次 ${hhmm(job.last_run)}${job.result ? ` · ${resultText(job.result)}` : ''}`;
+              return `<i class="jt-marker ${cls}" style="--i:${idx}" data-tip="${esc(job.name)} · ${when}"></i>`;
             }).join('')}
           </div>`).join('')}
       </div>
@@ -1571,6 +1727,9 @@
     initWipes();
     initReticle();
     initHeatColumns();
+    initUptimeWave();
+    initHeatLens();
+    initJobWave();
     initCursorTip();
     initSectionMotion();
     if (motionOK) {
