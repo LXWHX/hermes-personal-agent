@@ -440,13 +440,7 @@ def _warm_caches() -> None:
 
 @app.on_event("startup")
 def _startup_warmup() -> None:
-    dlog.log("INFO", f"dashboard started (ttl={TTL:g}s, demo={DEMO})")
     threading.Thread(target=_warm_caches, name="warm-caches", daemon=True).start()
-
-
-@app.on_event("shutdown")
-def _shutdown_log() -> None:
-    dlog.log("INFO", "dashboard stopping")
 
 
 if FRONTEND.is_dir():
