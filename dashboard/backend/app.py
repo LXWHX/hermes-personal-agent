@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 import demo
+import log as dlog
 from cache import CACHE
 from collectors import activity, board, drift, errors, events, jobs, outputs, overview, services, system, usage
 from util import DEMO, ROOT, envelope, iso, redact, tail, viewer_for
@@ -71,7 +72,17 @@ async def _guest_gate(request: Request, call_next):
     request.state.viewer = viewer
     if viewer == "guest" and request.url.path in GUEST_BLOCKED:
         return JSONResponse(GUEST_HIDDEN_BODY, status_code=403)
-    return await call_next(request)
+    path = request.url.path
+    try:
+        response = await call_next(request)
+    except Exception:
+        # 未捕获异常会由 Starlette 转成 500；这里先落盘，错误中枢才看得见。
+        dlog.exception(f"unhandled {request.method} {path}")
+        raise
+    if response.status_code >= 500:
+        dlog.error(f"HTTP {response.status_code} {request.method} {path}",
+                   throttle_key=f"http:{path}:{response.status_code}")
+    return response
 
 
 def _viewer(request: Request) -> str:
@@ -84,6 +95,7 @@ def _load(name: str, loader, *args, **kwargs) -> dict:
     try:
         return CACHE.get(name, TTL, lambda: loader(*args, **kwargs))
     except Exception as exc:  # one bad source must not take down the page
+        dlog.error(f"{name} 采集失败", exc, throttle_key=f"collect:{name}")
         return {"error": redact(f"{type(exc).__name__}: {exc}")[:240],
                 "_warnings": [f"{name} 采集失败"]}
 
@@ -167,6 +179,7 @@ def _drift() -> dict:
     try:
         return CACHE.get("drift", 60, drift.collect)
     except Exception as exc:  # git may be missing or the repo may be gone
+        dlog.error("drift 采集失败", exc, throttle_key="collect:drift")
         return {"error": redact(f"{type(exc).__name__}: {exc}")[:240],
                 "_warnings": ["drift 采集失败"]}
 
@@ -179,6 +192,7 @@ def _system() -> dict:
         # outbound probes are slow; cache them longer than the /proc numbers
         net = CACHE.get("system:net", 120, system.collect_network)
     except Exception as exc:
+        dlog.error("system:net 采集失败", exc, throttle_key="collect:system:net")
         net = {"network": None, "checked": None,
                "_warnings": [f"system:net 采集失败：{redact(str(exc))[:120]}"]}
     merged = {key: value for key, value in host.items() if key != "_warnings"}
@@ -421,12 +435,18 @@ def _warm_caches() -> None:
             for future in futures:
                 future.result()
     except Exception:
-        pass
+        dlog.exception("启动预热失败")
 
 
 @app.on_event("startup")
 def _startup_warmup() -> None:
+    dlog.log("INFO", f"dashboard started (ttl={TTL:g}s, demo={DEMO})")
     threading.Thread(target=_warm_caches, name="warm-caches", daemon=True).start()
+
+
+@app.on_event("shutdown")
+def _shutdown_log() -> None:
+    dlog.log("INFO", "dashboard stopping")
 
 
 if FRONTEND.is_dir():

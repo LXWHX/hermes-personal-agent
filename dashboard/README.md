@@ -19,7 +19,7 @@
 - M1–M3 全部完成：最后两块为配置漂移（`/api/drift`）与系统资源（`/api/system`），commit `0c27f67`
 - 停服演练通过（停 biubiu +15s 变红）；DNS 已从 DNSPod 迁入 Cloudflare（记录与过程见计划 §12.9）
 - 应急通道：SSH 隧道 `ssh -L 8788:127.0.0.1:8787 root@<server>`
-- 数据源已核对：6/6 服务、四个 profile 的 state.db、14 个错误源、approvals 计数一致
+- 数据源已核对：6/6 服务、四个 profile 的 state.db、18 个错误源、approvals 计数一致
 - 详细验证数据、口径与每日检查清单见 [`docs/dashboard-plan.md` §12–§13](../docs/dashboard-plan.md)
 
 ## 快速开始
@@ -112,6 +112,19 @@ systemd `cloudflared` active/enabled，4 条 QUIC 连接挂东京边缘。
 单源失败只让对应模块返回 `{"error": ...}` 或空数据 + `warnings`，不影响整页。
 缓存默认 20s（`HERMES_DASHBOARD_TTL`），额度/漂移 60s，出站探测 120s。
 
+## 错误日志与可用性监控（2026-10-26）
+
+- 应用日志：`/root/hermes-dashboard/logs/dashboard.log`（`backend/log.py`）。只写
+  WARNING+：采集器失败、未捕获异常（带 traceback）、HTTP 5xx、启停；同一 key 10 分钟
+  节流，2MB 轮转一份 `.log.1`。这是错误中枢「网站后台」文件源。
+- 错误中枢同时新增「网站进程」（`hermes-dashboard`）与「隧道」（`cloudflared`）journal
+  源，服务健康区覆盖这两个 unit；cloudflared 的 `context canceled` / SSE 回收已做噪音过滤，
+  只留 `Unable to reach the origin` 这类真故障。
+- 外部可达性：`/root/hermes-errors/site-probe.py` 每分钟探测 local(8787)/tunnel/access
+  三层，连续 3 次失败推 Bark（timeSensitive），恢复再推一条；健康时不写日志。
+- ⚠️ 应用日志不记录正常请求（`--no-access-log`），也不含访问者 IP；排障时用
+  `journalctl -u hermes-dashboard` 看进程生命周期，业务错误看上面的文件。
+
 ## 采集器与数据源
 
 | 模块 | 真源 | 说明 |
@@ -153,6 +166,7 @@ dashboard/
 ├── backend/
 │   ├── app.py                 # FastAPI 路由 + SSE + 静态托管
 │   ├── cache.py               # TTL 缓存
+│   ├── log.py                 # 应用日志 → /root/hermes-dashboard/logs（错误中枢文件源）
 │   ├── demo.py                # 明确标注的演示快照
 │   ├── build_demo.py          # 重新生成 frontend/demo-data.js
 │   ├── util.py                # 时间/子进程/脱敏
