@@ -570,7 +570,12 @@ main { padding: 0 var(--pad); }
 .state-tag--warn { background: var(--paper); }
 .state-tag--unknown { color: var(--grey); border-color: var(--line); }
 
-.uptime { display: flex; gap: 1px; width: 100%; min-width: 168px; height: 13px; }
+/* the 24h band spans the full row height, edge to edge (percentage heights
+   don't resolve inside td — stretch it with absolute positioning instead;
+   the min-width moves to the cell so the column keeps its width) */
+.table--services .uptime-cell { position: relative; padding: 0; min-width: 184px; }
+.table--services .uptime-cell .uptime { position: absolute; inset: 0 8px; width: auto; min-width: 0; }
+.uptime { display: flex; gap: 1px; width: 100%; min-width: 168px; }
 .uptime i {
   flex: 1;
   background: var(--ink);
@@ -1731,10 +1736,29 @@ html.cursor-on, html.cursor-on * { cursor: none !important; }
 .heatmap__cell.is-col { outline-color: rgba(0, 0, 0, 0.32); }
 .heatmap__hour.is-col { color: var(--ink); font-weight: 700; }
 
-/* uptime segments magnify under the cursor (they carry a title) */
+/* floating tip pinned to the cursor for [data-tip] carriers (uptime band,
+   heatmap cells) — set/followed by app.js, never a native title popup */
+.cursor-tip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  max-width: 240px;
+  padding: 4px 7px;
+  background: var(--ink);
+  color: var(--ground);
+  font-size: 9px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 60;
+}
+
+/* uptime segments magnify under the cursor (they carry a data-tip);
+   mild scale only — the band now fills the whole row */
 @media (hover: hover) and (pointer: fine) {
   .uptime i { transition: transform 90ms var(--ease-mech); }
-  .uptime i:hover { transform: scaleY(1.6); }
+  .uptime i:hover { transform: scaleY(1.15); }
 }
 
 /* ---------------------------------------------------------------- guest view

@@ -204,6 +204,48 @@
     host.addEventListener('pointerleave', clear);
   }
 
+  /* floating tip pinned to the cursor for [data-tip] carriers (uptime band,
+     heatmap cells) — replaces the native title popup */
+  function initCursorTip() {
+    if (!FINE) return;
+    const tip = document.createElement('div');
+    tip.className = 'cursor-tip';
+    tip.hidden = true;
+    document.body.appendChild(tip);
+    let carrier = null;
+    const place = (e) => {
+      const r = tip.getBoundingClientRect();
+      let x = e.clientX + 14;
+      let y = e.clientY + 16;
+      if (x + r.width > window.innerWidth - 8) x = e.clientX - r.width - 14;
+      if (y + r.height > window.innerHeight - 8) y = e.clientY - r.height - 16;
+      tip.style.transform = `translate(${x}px, ${y}px)`;
+    };
+    const hide = () => {
+      carrier = null;
+      tip.hidden = true;
+    };
+    document.addEventListener('pointerover', (e) => {
+      const el = e.target instanceof Element ? e.target.closest('[data-tip]') : null;
+      if (!el || el === carrier) return;
+      carrier = el;
+      tip.textContent = el.dataset.tip;
+      tip.hidden = false;
+      place(e);
+    });
+    document.addEventListener('pointermove', (e) => {
+      if (!carrier) return;
+      if (!carrier.isConnected) { hide(); return; } /* section re-rendered mid-hover */
+      place(e);
+    });
+    document.addEventListener('pointerout', (e) => {
+      if (!carrier) return;
+      if (e.relatedTarget instanceof Node && carrier.contains(e.relatedTarget)) return;
+      hide();
+    });
+    window.addEventListener('scroll', hide, { passive: true });
+  }
+
   /* bars morph from previous width to new width across polls */
   const barPrev = new Map();
   function morphBars(root) {
@@ -568,7 +610,7 @@
       const tagClass = unknown ? 'unknown' : active ? 'ok' : 'bad';
       const segs = (u.segments || []).map((s) => {
         const cls = s.up === true ? '' : s.up === false ? 'down' : 'unknown';
-        return `<i class="${cls}" title="${esc(s.start)} ${s.up ? '在线' : '离线'}"></i>`;
+        return `<i class="${cls}" data-tip="${esc(s.start)} · ${s.up ? '在线' : '离线'}"></i>`;
       }).join('');
       return `<tr>
         <td><span class="service-name">${esc(u.label)}</span><span class="service-unit">${esc(u.unit)}</span></td>
@@ -577,7 +619,7 @@
         <td class="num">${u.restarts === null || u.restarts === undefined ? '—' : esc(u.restarts)}</td>
         <td class="num">${esc(u.memory_human || '—')}</td>
         <td class="num">${u.cpu_seconds === null || u.cpu_seconds === undefined ? '—' : `${u.cpu_seconds}s`}</td>
-        <td><div class="uptime" aria-label="24 小时在线条带">${segs}</div></td>
+        <td class="uptime-cell"><div class="uptime" aria-label="24 小时在线条带">${segs}</div></td>
         <td>${esc(u.last_event || '—')}</td>
       </tr>`;
     }).join('') || `<tr><td colspan="8" class="empty">没有服务记录</td></tr>`;
@@ -623,7 +665,7 @@
         const row = Array.from({ length: 24 }, (_, hour) => {
           const count = byKey.get(`${role}|${date}|${hour}`) || 0;
           const alpha = count === 0 ? 0.03 : Math.max(0.1, Math.min(1, count / max));
-          return `<span class="heatmap__cell" data-h="${hour}" style="--a:${alpha.toFixed(3)};--d:${di * 6 + hour * 16}ms" title="${esc(date)} ${String(hour).padStart(2, '0')}:00 · ${count} 条"></span>`;
+          return `<span class="heatmap__cell" data-h="${hour}" style="--a:${alpha.toFixed(3)};--d:${di * 6 + hour * 16}ms" data-tip="${esc(date)} ${String(hour).padStart(2, '0')}:00 · ${count} 条"></span>`;
         }).join('');
         return `<span class="heatmap__day">${dateLabel(date)}</span>${row}`;
       }).join('');
@@ -1529,6 +1571,7 @@
     initWipes();
     initReticle();
     initHeatColumns();
+    initCursorTip();
     initSectionMotion();
     if (motionOK) {
       const wm = $('.wordmark h1');
