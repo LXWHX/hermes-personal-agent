@@ -40,6 +40,7 @@ UNIT_LABELS = {
     "hermes-eye": ("汉堡之眼", "hamburger"),
     "hamburger-nightwatch": ("夜巡", "hamburger"),
     "hamburger-guild-guard": ("公会守卫", "hamburger"),
+    "ollama": ("记忆嵌入 · Ollama", "memory"),
 }
 SERVICE_UNITS = list(UNIT_LABELS)
 
