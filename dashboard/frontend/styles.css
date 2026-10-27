@@ -1562,7 +1562,13 @@ main { padding: 0 var(--pad); }
 .is-pending .source-row__bar i,
 .is-pending .quota__bar i,
 .is-pending .meter i { transform-origin: 0 50%; transform: scaleX(0); }
-.is-pending .spark svg polyline { stroke-dasharray: 1; stroke-dashoffset: 1; }
+/* !important: poll re-renders rebuild sparks with .is-draw baked into the
+   markup, and animation fill (forwards) outranks normal declarations — the
+   off-screen animation would otherwise finish and leave the chart drawn,
+   punching through the blank. Author !important is the only rank above
+   the animation origin, so the rest state holds until the section is
+   drawn again (is-pending comes off before .is-draw is re-added) */
+.is-pending .spark svg polyline { stroke-dasharray: 1; stroke-dashoffset: 1 !important; }
 .is-pending .spark svg polygon { opacity: 0; }
 .is-pending .spark svg circle { animation: none; opacity: 0; }
 .is-pending .heatmap__cell { opacity: 0; }
