@@ -447,17 +447,23 @@
   function initSectionMotion() {
     if (!motionOK || !('IntersectionObserver' in window)) return;
     const shown = new WeakMap();
-    /* draw once a section has slid ~1/4 of the viewport in; dipping back
-       into the bottom 25% band does NOT re-arm — only a full viewport
-       exit (see clear below) resets the section, so a chart that is
-       still on screen never blanks and replays under the cursor */
+    /* draw when the section's first content block slides in — the
+       animated charts sit right under the head, so that block must be
+       on screen when the sweep starts. Watching the whole section made
+       upward entry fire while only the section's tail (the table) had
+       crossed the top edge: the timeline was still above the fold, the
+       sweep ran off-screen, and the chart arrived static. Dipping back
+       out of view does NOT re-arm — only a full viewport exit (see
+       clear below) resets the section, so a chart that is still on
+       screen never blanks and replays under the cursor */
     const draw = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         if (!entry.isIntersecting) continue;
-        if (shown.get(entry.target) === true) continue;
-        shown.set(entry.target, true);
-        entry.target.classList.remove('is-pending');
-        replaySectionMotion(entry.target);
+        const section = entry.target.closest('main .section');
+        if (!section || shown.get(section) === true) continue;
+        shown.set(section, true);
+        section.classList.remove('is-pending');
+        replaySectionMotion(section);
       }
     }, { threshold: 0, rootMargin: '0px 0px -25% 0px' });
     /* blank + re-arm as soon as the section leaves the viewport entirely,
@@ -471,7 +477,8 @@
     }, { threshold: 0 });
     $$('main .section').forEach((section) => {
       section.classList.add('is-pending'); /* rest blank until first draw */
-      draw.observe(section);
+      /* anchor = the head's next sibling, i.e. the first chart block */
+      draw.observe(section.querySelector('.section-head + *') || section);
       clear.observe(section);
     });
   }
