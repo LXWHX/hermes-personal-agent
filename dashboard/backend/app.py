@@ -7,6 +7,7 @@ Demo (no server data required):
 """
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 import os
@@ -337,7 +338,10 @@ def _log_tail(role: str, lines: int = 30) -> list[dict]:
     return rows[-lines:]
 
 
-def _follow(role: str):
+# HERMES_PATCH: dashboard-sse-disconnect-v1
+# 原来是同步生成器 + time.sleep：客户端断开后线程仍在跑，uvicorn 收尾会一直等这条连接，
+# systemd 只能等满 TimeoutStopSec 再 SIGKILL（10-26 九次 502 的真凶）。
+async def _follow(role: str, request: Request):
     offsets: dict[Path, int] = {}
     paths = LOG_FILES.get(role, [])
     for path in paths:
@@ -351,6 +355,8 @@ def _follow(role: str):
 
     last_ping = time.monotonic()
     while True:
+        if await request.is_disconnected():  # 客户端走了就收工，别拖住 shutdown
+            return
         wrote = False
         for path in paths:
             try:
@@ -380,28 +386,30 @@ def _follow(role: str):
             yield ": keepalive\n\n"
             last_ping = now_mono
         if not wrote:
-            time.sleep(2)
+            await asyncio.sleep(2)
 
 
 @app.get("/api/logs/stream")
 def api_logs_stream(request: Request, role: str = Query("all")):
     if DEMO:
-        def gen():
+        async def gen():
             lines = demo.snapshot()["logs"]
             yield _sse("log", {"role": "system", "source": "演示", "line": "演示日志流 · 后端未连接"})
             for line in lines:
-                time.sleep(0.7)
+                await asyncio.sleep(0.7)
                 clock, _, text = line.partition(" ")
                 yield _sse("log", {"role": role if role != "all" else "system", "source": "演示", "line": text, "time": clock})
             while True:
-                time.sleep(15)
+                if await request.is_disconnected():
+                    return
+                await asyncio.sleep(15)
                 yield ": keepalive\n\n"
         return StreamingResponse(gen(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
     if role == "all":
         # one stream per role would require multiplexing; default to the main line
         role = "hanbao"
-    return StreamingResponse(_follow(role), media_type="text/event-stream",
+    return StreamingResponse(_follow(role, request), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no",
                                       "Connection": "keep-alive"})
 
