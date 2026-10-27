@@ -585,6 +585,13 @@ main { padding: 0 var(--pad); }
 .uptime i.down { background: var(--alert); }
 .uptime i.unknown { background: var(--line); }
 
+/* wave headroom: the uptime cursor wave lifts segments past the last
+   row's bottom edge (overflow-x: auto makes overflow-y compute to auto
+   too, so a few px of overshoot used to pop a vertical scrollbar and
+   reflow every column mid-hover). The padding absorbs the overshoot;
+   transparent, so it just reads as a couple px of section breathing. */
+.table-wrap--wave { padding-bottom: 10px; }
+
 .services-foot {
   display: flex;
   flex-wrap: wrap;
@@ -1683,6 +1690,43 @@ main { padding: 0 var(--pad); }
   html.js-motion .toc-rail { animation: toc-in 0.5s var(--ease-mech) 0.45s both; }
 }
 @keyframes toc-in { from { transform: translateX(100%); } }
+
+/* rail drawer (2026-10-27): at rest the rail tucks halfway into the
+   right edge — numbers only, hairline retracted. Hover, keyboard focus
+   or an open status popover sets --toc-open; every rule below reads
+   that one flag. Open delays scale with the flag (staggered wave in),
+   close delays collapse to 0 (everything clears fast, drawer glides
+   shut). Pointer-capable wide screens only — touch keeps today's rail. */
+@media (min-width: 1241px) and (hover: hover) {
+  .toc-rail {
+    --toc-open: 0;
+    width: calc(48px + var(--toc-open) * 48px);
+    transition: width 0.42s var(--ease-mech);
+  }
+  .toc-rail:hover,
+  .toc-rail:focus-within { --toc-open: 1; }
+  .toc-rail:has(#sys-pill[aria-expanded="true"]) { --toc-open: 1; }
+
+  /* labels clip inside their link; the reveal cascades 01 → 11 via --i */
+  .toc-rail__link { overflow: hidden; }
+  .toc-rail__name {
+    opacity: var(--toc-open);
+    transform: translateX(calc((1 - var(--toc-open)) * 8px));
+    transition:
+      opacity 0.18s linear calc(var(--toc-open) * (0.12s + var(--i, 0) * 12ms)),
+      transform 0.32s var(--ease-mech) calc(var(--toc-open) * (0.08s + var(--i, 0) * 12ms));
+  }
+
+  /* status entry fades in with the drawer. Its footprint is pinned to
+     the expanded width (rail 96px − 2 × 9px margin) so the pill never
+     re-wraps while the rail slides — while tucked, the overflow just
+     hangs past the viewport edge, clipped for free */
+  .sys-wrap--rail { width: 78px; }
+  .sys-wrap--rail .sys-pill {
+    opacity: var(--toc-open, 0);
+    transition: opacity 0.2s linear calc(var(--toc-open, 0) * 0.26s);
+  }
+}
 
 /* ------------------------------------------------------------------
    MOTION LAYER v2 — CURSOR (2026-10-23)
