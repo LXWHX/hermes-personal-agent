@@ -555,6 +555,7 @@ main { padding: 0 var(--pad); }
 
 .service-name { display: block; font-weight: 700; }
 .service-unit { display: block; font-size: 8px; color: var(--grey); letter-spacing: 0.03em; }
+.service-unit--diff { color: var(--alert); word-break: break-word; }
 .state-tag {
   display: inline-block;
   padding: 1px 5px;

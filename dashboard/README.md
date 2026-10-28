@@ -103,7 +103,7 @@ systemd `cloudflared` active/enabled，4 条 QUIC 连接挂东京边缘。
 | `GET /api/board` | PLAN.md / STATUS.md 解析结果 |
 | `GET /api/outputs` | 五类哨兵 + 早报 + digest 最近一期 |
 | `GET /api/usage` | OpenCode Go 三窗额度 + 本地 token 估算 |
-| `GET /api/drift` | 仓库 HEAD/脏文件 + SOUL/config 线上副本 sha256 一致性 |
+| `GET /api/drift` | 仓库 HEAD/脏文件 + SOUL/config 副本 + heybox/biubiu sidecar 文件一致性 |
 | `GET /api/system` | 主机负载/内存/swap/磁盘/加固旋钮 + 出站可达性 |
 | `GET /api/events` | 合并事件流 |
 | `GET /api/logs/stream?role=` | SSE 日志（脱敏，15s keepalive） |
@@ -137,7 +137,7 @@ systemd `cloudflared` active/enabled，4 条 QUIC 连接挂东京边缘。
 | `outputs.py` | 哨兵日志 / state / drafts、cron 输出 | `[SILENT]` 与失败分开 |
 | `usage.py` | `https://opencode.ai/zen/go/v1/usage` + key | key 只在服务端读取，永不返回 |
 | `events.py` | 上述模块合并 | 静音仅写浏览器 localStorage |
-| `drift.py` | `git`（只读）+ 各部署落点 | 只比对 sha256 摘要与 mtime；config.yaml 为模板，差异属预期 |
+| `drift.py` | `git`（只读）+ 各部署落点 | 9 条：4 个 SOUL、config 模板、4 个 sidecar bundle。SOUL/脚本按字节；sidecar JSON 规范化后比对并忽略部署期 `allowed_room_ids`；`changed` 只回文件名 |
 | `system.py` | `/proc`、`disk_usage`、4 个公网探测 | 4xx/5xx 也算可达；仅超时/DNS 失败算断 |
 
 ## 安全与脱敏

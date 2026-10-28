@@ -1188,14 +1188,20 @@
     const s = data.summary || {};
     $('#drift-summary').textContent = `${s.same ?? '—'} 一致 · ${s.drift ?? '—'} 漂移 · ${s.missing ?? '—'} 缺失`;
     const arts = data.artifacts || [];
-    $('#drift-body').innerHTML = arts.map((a) => `
+    $('#drift-body').innerHTML = arts.map((a) => {
+      const diff = (a.changed || []).filter(Boolean);
+      const diffLine = diff.length
+        ? `<span class="service-unit service-unit--diff" title="${esc(diff.join('、'))}">差异：${esc(diff.slice(0, 3).join('、'))}${diff.length > 3 ? ` 等 ${diff.length} 个` : ''}</span>`
+        : '';
+      return `
       <tr>
-        <td><span class="service-name">${esc(a.label)}</span><span class="service-unit">${esc(a.live_label)}</span></td>
+        <td><span class="service-name">${esc(a.label)}</span><span class="service-unit">${esc(a.live_label)}</span>${diffLine}</td>
         <td>${driftTag(a.status)}</td>
         <td class="micro">${esc(a.deploy)}</td>
         <td class="num" title="仓库 ${esc(a.repo_mtime || '—')}">${a.live_mtime ? `${dateLabel(a.live_mtime)} ${String(a.live_mtime).slice(11, 16)}` : '—'}</td>
-      </tr>`).join('') || `<tr><td colspan="4" class="empty">没有漂移条目</td></tr>`;
-    $('#drift-foot').textContent = '一致性 = sha256(仓库检出) vs 线上副本；config.yaml 为手工同步模板，差异属预期。';
+      </tr>`;
+    }).join('') || `<tr><td colspan="4" class="empty">没有漂移条目</td></tr>`;
+    $('#drift-foot').textContent = '一致性 = 仓库检出 vs 线上副本；SOUL 与 sidecar 脚本按字节比对，sidecar JSON 忽略部署期房间号；config.yaml 为手工同步模板，差异属预期。';
   }
 
   function renderSystem(payload) {

@@ -336,13 +336,17 @@ def drift() -> dict:
             "dirty_sample": [],
         },
         "artifacts": [
-            {"id": "hanbao-soul", "label": "憨包 SOUL", "repo_label": "server/SOUL.md", "live_label": ".hermes/SOUL.md", "deploy": "board-deploy.sh", "status": "same", "repo_mtime": _at(15, 44, -4)[:16], "live_mtime": _at(15, 44, -4)[:16], "tolerated": False},
-            {"id": "hamburger-soul", "label": "汉堡 SOUL", "repo_label": "server/hamburger/SOUL.md", "live_label": "profiles/hamburger/SOUL.md", "deploy": "hamburger-deploy.sh", "status": "drift", "repo_mtime": _at(10, 12, -1)[:16], "live_mtime": _at(17, 13, -3)[:16], "tolerated": False},
-            {"id": "heybox-soul", "label": "heybox SOUL", "repo_label": "server/heybox/SOUL.md + PROFILE_EXTRA.md", "live_label": "profiles/heybox/SOUL.md", "deploy": "agent-bridge-deploy.sh", "status": "same", "repo_mtime": _at(16, 37, -3)[:16], "live_mtime": _at(16, 37, -3)[:16], "tolerated": False},
-            {"id": "biubiu-soul", "label": "biubiu SOUL", "repo_label": "server/biubiu/SOUL.md + PROFILE_EXTRA.md", "live_label": "profiles/biubiu/SOUL.md", "deploy": "agent-bridge-deploy.sh", "status": "same", "repo_mtime": _at(16, 37, -3)[:16], "live_mtime": _at(16, 37, -3)[:16], "tolerated": False},
-            {"id": "config", "label": "config.yaml（模板）", "repo_label": "server/config.yaml", "live_label": ".hermes/config.yaml", "deploy": "手工同步", "status": "template", "repo_mtime": _at(11, 50)[:16], "live_mtime": _at(11, 49)[:16], "tolerated": True},
+            {"id": "hanbao-soul", "label": "憨包 SOUL", "repo_label": "server/SOUL.md", "live_label": ".hermes/SOUL.md", "deploy": "board-deploy.sh", "status": "same", "repo_mtime": _at(15, 44, -4)[:16], "live_mtime": _at(15, 44, -4)[:16], "tolerated": False, "changed": []},
+            {"id": "hamburger-soul", "label": "汉堡 SOUL", "repo_label": "server/hamburger/SOUL.md", "live_label": "profiles/hamburger/SOUL.md", "deploy": "hamburger-deploy.sh", "status": "drift", "repo_mtime": _at(10, 12, -1)[:16], "live_mtime": _at(17, 13, -3)[:16], "tolerated": False, "changed": []},
+            {"id": "heybox-soul", "label": "heybox SOUL", "repo_label": "server/heybox/SOUL.md + PROFILE_EXTRA.md", "live_label": "profiles/heybox/SOUL.md", "deploy": "agent-bridge-deploy.sh", "status": "same", "repo_mtime": _at(16, 37, -3)[:16], "live_mtime": _at(16, 37, -3)[:16], "tolerated": False, "changed": []},
+            {"id": "biubiu-soul", "label": "biubiu SOUL", "repo_label": "server/biubiu/SOUL.md + PROFILE_EXTRA.md", "live_label": "profiles/biubiu/SOUL.md", "deploy": "agent-bridge-deploy.sh", "status": "same", "repo_mtime": _at(16, 37, -3)[:16], "live_mtime": _at(16, 37, -3)[:16], "tolerated": False, "changed": []},
+            {"id": "config", "label": "config.yaml（模板）", "repo_label": "server/config.yaml", "live_label": ".hermes/config.yaml", "deploy": "手工同步", "status": "template", "repo_mtime": _at(11, 50)[:16], "live_mtime": _at(11, 49)[:16], "tolerated": True, "changed": []},
+            {"id": "heybox-sidecar-code", "label": "heybox sidecar 代码", "repo_label": "server/heybox/*.py + server/shared/*", "live_label": "hermes-heybox/*.py", "deploy": "heybox-deploy.sh", "status": "same", "repo_mtime": _at(18, 3, -1)[:16], "live_mtime": _at(18, 3, -1)[:16], "tolerated": False, "changed": []},
+            {"id": "heybox-sidecar-config", "label": "heybox sidecar 配置/人设", "repo_label": "server/heybox/{config,SOUL,PROFILE_EXTRA,service,mem0}", "live_label": "hermes-heybox/{config,SOUL,PROFILE_EXTRA,service,mem0}", "deploy": "heybox-deploy.sh", "status": "same", "repo_mtime": _at(18, 3, -1)[:16], "live_mtime": _at(18, 3, -1)[:16], "tolerated": False, "changed": []},
+            {"id": "biubiu-sidecar-code", "label": "biubiu sidecar 代码", "repo_label": "server/biubiu/*.py + server/scripts/*", "live_label": "hermes-biubiu/*.py", "deploy": "biubiu-deploy.sh", "status": "drift", "repo_mtime": _at(17, 50, -1)[:16], "live_mtime": _at(16, 41, -1)[:16], "tolerated": False, "changed": ["biubiu.py"]},
+            {"id": "biubiu-sidecar-config", "label": "biubiu sidecar 配置/人设", "repo_label": "server/biubiu/{config,SOUL,PROFILE_EXTRA,service,mem0}", "live_label": "hermes-biubiu/{config,SOUL,PROFILE_EXTRA,service,mem0}", "deploy": "biubiu-deploy.sh", "status": "same", "repo_mtime": _at(13, 50, -1)[:16], "live_mtime": _at(16, 42, -1)[:16], "tolerated": False, "changed": []},
         ],
-        "summary": {"same": 3, "drift": 1, "template": 1, "missing": 0},
+        "summary": {"same": 7, "drift": 1, "template": 1, "missing": 0},
     }
 
 

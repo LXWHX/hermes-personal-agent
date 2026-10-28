@@ -478,6 +478,22 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
   `cb91dc08-9649-4d44-b80e-a70c6e4257bf.cfargotunnel.com`（橙云）；`hermes.joeli.site`
   仍 302 到 Access 登录页。
 
+### 12.11 漂移扩展到 sidecar（2026-10-28）
+
+- **动机**：10-27 改完 SOUL 后面板全绿，但 biubiu 的 sidecar 代码仍停在 16:41（漏跑一次
+  `biubiu-deploy.sh`，漏了 `52e6593` 的 `playing_announce_stops` 默认值）。旧 `drift.py`
+  只比 4 个 SOUL + config 模板，看不到 `/root/hermes-*` 的部署产物。
+- **新增 4 个 bundle**：`heybox-sidecar-code` / `heybox-sidecar-config` /
+  `biubiu-sidecar-code` / `biubiu-sidecar-config`。code 覆盖 `*.py`、`shared/watchlist.py`、
+  `shared/playstats.py`、`mem0-retrieval-fix.py`、`owner_schedule.py`、`nickname-presence.py`、
+  `game-night-reminder.py`；config 覆盖 sidecar JSON、SOUL、PROFILE_EXTRA、systemd unit、
+  mem0 模板（不含含 key 的 `mem0.json` 与 `.env`）。
+- **比对口径**：脚本/文本按字节；sidecar JSON 先规范化（`sort_keys`、紧凑分隔符）再比，
+  并忽略部署期才写入的 `allowed_room_ids`，只保留真实配置差异。响应新增 `changed`
+  文件名数组（只回文件名，不回内容/绝对路径），前端在该行下方红字列出（最多 3 个 + 共 N 个）。
+- **实测**：修复后 8 same + 1 template、0 drift；demo 数据同步到 9 行，并保留一条
+  `biubiu.py` 漂移样例便于验证红字渲染。
+
 
 ---
 
