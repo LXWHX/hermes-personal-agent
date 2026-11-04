@@ -69,6 +69,11 @@ ARTIFACTS = [
 # commit behind while the panel was green), so each sidecar is checked as a small
 # bundle.  `changed` names the offending files without exposing contents.
 # Tuple: (repo-relative path, live path, display name, kind[, ignore keys]).
+# Config keys the deploy scripts legitimately rewrite/keep on the live copy:
+# allowed_room_ids is baked in by both deploys; heybox merge_config preserves the
+# server-measured lol_voice_* values and appends the lol_commands table.
+MERGED_CONFIG_KEYS = ("allowed_room_ids", "lol_commands", "lol_voice_channel_ids",
+                      "lol_voice_room_id")
 SIDECAR_ARTIFACTS = [
     {
         "id": "heybox-sidecar-code",
@@ -98,7 +103,7 @@ SIDECAR_ARTIFACTS = [
         "deploy": "heybox-deploy.sh",
         "pairs": [
             ("server/heybox/heybox-config.json", ROOT / "hermes-heybox" / "heybox-config.json",
-             "heybox-config.json", "json", ("allowed_room_ids",)),
+             "heybox-config.json", "json", MERGED_CONFIG_KEYS),
             ("server/heybox/SOUL.md", ROOT / "hermes-heybox" / "SOUL.md", "SOUL.md", "bytes"),
             ("server/heybox/PROFILE_EXTRA.md", ROOT / "hermes-heybox" / "PROFILE_EXTRA.md",
              "PROFILE_EXTRA.md", "bytes"),
@@ -132,7 +137,7 @@ SIDECAR_ARTIFACTS = [
         "deploy": "biubiu-deploy.sh",
         "pairs": [
             ("server/biubiu/biubiu-config.json", ROOT / "hermes-biubiu" / "biubiu-config.json",
-             "biubiu-config.json", "json", ("allowed_room_ids",)),
+             "biubiu-config.json", "json", MERGED_CONFIG_KEYS),
             ("server/biubiu/SOUL.md", ROOT / "hermes-biubiu" / "SOUL.md", "SOUL.md", "bytes"),
             ("server/biubiu/PROFILE_EXTRA.md", ROOT / "hermes-biubiu" / "PROFILE_EXTRA.md",
              "PROFILE_EXTRA.md", "bytes"),
