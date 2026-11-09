@@ -459,7 +459,8 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
     `note` 固定「访客视图 · 部分模块隐藏」；`roles[].metrics → []`（指标混有 05/06/07）；
     `online_services/total_services/api_ok` 与 `uptime_seconds` 保留（02 可见）；
     `global.state` 只看 `roles` 是否有 `offline`。
-  - `/api/jobs`：`summary → null`（明细表 guest 不显示，服务端仍兜底裁剪）。
+  - `/api/jobs`：访客只下发 `name`（统一为「秘密任务」）/ `last_run` / `next_run` / `result`；
+    摘要、crontab id、命令行、计划等身份细节全部裁掉，时间轴悬浮也只显示「秘密任务」。
   - `/api/services`、`/api/activity`、`/api/usage`、`/api/drift`、`/api/system`：原样。
   - `/health`：guest 时带 `"viewer": "guest"`。
 - **403 端点**：`/api/errors`、`/api/board`、`/api/outputs`、`/api/events`、

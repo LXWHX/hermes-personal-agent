@@ -133,11 +133,26 @@ def _guest_overview(data: dict) -> dict:
     return data
 
 
+GUEST_JOB_NAME = "秘密任务"
+GUEST_JOB_KEYS = ("last_run", "next_run", "result")
+
+
 def _guest_jobs(data: dict) -> dict:
-    """04 摘要列在访客版一律打码（服务端置空，前端再兜一层）。"""
+    """04 只给访客时间轴：任务身份一律在服务端裁剪。
+
+    时间轴只需要上次 / 下次 / 结果；任务名统一成「秘密任务」，其余字段
+    （crontab id、命令行、计划、摘要等可能反推出身份的细节）全部不下发。
+    前端再兜一层，缓存切换期也不会闪出真名。
+    """
     data = copy.deepcopy(data)
-    for job in data.get("jobs", []):
-        job["summary"] = None
+    jobs = data.get("jobs")
+    if not isinstance(jobs, list):
+        return data
+    data["jobs"] = [
+        {"name": GUEST_JOB_NAME,
+         **{key: job.get(key) for key in GUEST_JOB_KEYS}}
+        for job in jobs
+    ]
     return data
 
 

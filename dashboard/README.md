@@ -78,7 +78,9 @@ systemd `cloudflared` active/enabled，4 条 QUIC 连接挂东京边缘。
   `/api/logs/recent` `/api/logs/stream`。
 - `overview` 中来自隐藏模块的字段仍置空：`overdue_tasks`（06）、`open_approvals`（05）、
   `roles[].metrics`（05/06/07）；服务数、API 探活、uptime 随 02 保留。
-- `jobs.summary` 服务端置空（guest 不显示明细表，仍做兜底）。
+- `jobs` 服务端只下发 `name`（统一为「秘密任务」）/ `last_run` / `next_run` / `result`；
+  摘要、crontab id、命令行、计划等身份细节全部裁掉。时间轴悬浮也只显示「秘密任务」，
+  不泄露任务名、时间与结果（guest 不显示明细表，时间与结果仍由图表位置/颜色表达）。
 - 配置：systemd `Environment=HERMES_DASHBOARD_GUEST_HOSTS=hamburger.joeli.site`
   （逗号分隔可写多个；**留空 = 关闭访客视图**，所有 Host 都按 owner 处理）。
 - 临时关闭访客域名：删掉 Tunnel 的 Route，或把该 Access 应用改回 OTP；服务端无需改动。

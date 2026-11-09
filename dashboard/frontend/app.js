@@ -864,6 +864,7 @@
     setStamp('jobs-stamp', payload);
     const data = payload && payload.data;
     const jobs = (data && data.jobs) || [];
+    const guest = state.viewer === 'guest';
     const timeline = $('#job-timeline');
     const sig = sigOf(data);
     const rebuild = !(sig && sig === state.jobsSig);
@@ -895,7 +896,9 @@
               const when = kind === 'next'
                 ? `下次 ${hhmm(job.next_run)}`
                 : `上次 ${hhmm(job.last_run)}${job.result ? ` · ${resultText(job.result)}` : ''}`;
-              return `<i class="jt-marker ${cls}" style="--d:${hour * 26 + idx * 40}ms" data-tip="${esc(job.name)} · ${when}"></i>`;
+              /* 访客只看到统一占位：悬浮不再泄露任务名、时间与结果 */
+              const tip = guest ? '秘密任务' : `${job.name} · ${when}`;
+              return `<i class="jt-marker ${cls}" style="--d:${hour * 26 + idx * 40}ms" data-tip="${esc(tip)}"></i>`;
             }).join('')}
           </div>`).join('')}
       </div>
@@ -912,7 +915,7 @@
         : esc(job.summary || '—');
       return `
       <tr>
-        <td>${esc(job.name)}</td>
+        <td>${esc(guest ? '秘密任务' : job.name)}</td>
         <td>${esc(job.owner || '—')}</td>
         <td title="${esc(job.schedule || '')}">${esc(job.schedule_label || job.schedule || '—')}</td>
         <td class="num">${job.last_run ? hhmm(job.last_run) : '—'}</td>
