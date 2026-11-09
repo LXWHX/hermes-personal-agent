@@ -25,7 +25,8 @@ from fastapi.staticfiles import StaticFiles
 import demo
 import log as dlog
 from cache import CACHE
-from collectors import activity, board, drift, errors, events, jobs, outputs, overview, services, system, usage
+from collectors import (activity, board, drift, errors, events, halo, jobs, outputs,
+                        overview, services, system, usage)
 from util import DEMO, ROOT, envelope, iso, redact, tail, viewer_for
 
 FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
@@ -353,6 +354,17 @@ def _log_tail(role: str, lines: int = 30) -> list[dict]:
     return rows[-lines:]
 
 
+def _halo_logs(limit: int = 40) -> list[dict]:
+    """Owner-only EXEC LOG window: redacted tails woven across all four streams."""
+    streams = [_log_tail(key, 10) for key in ("hanbao", "hamburger", "biubiu", "system")]
+    rows: list[dict] = []
+    for index in range(max((len(stream) for stream in streams), default=0)):
+        for stream in streams:
+            if index < len(stream):
+                rows.append(stream[index])
+    return [{"line": row["line"]} for row in rows[-limit:]]
+
+
 # HERMES_PATCH: dashboard-sse-disconnect-v1
 # 原来是同步生成器 + time.sleep：客户端断开后线程仍在跑，uvicorn 收尾会一直等这条连接，
 # systemd 只能等满 TimeoutStopSec 再 SIGKILL（10-26 九次 502 的真凶）。
@@ -442,6 +454,64 @@ def api_logs_recent(request: Request, role: str = "all"):
     else:
         rows = _log_tail(role, 40)
     return _respond({"lines": rows}, viewer=_viewer(request))
+
+
+def _halo_data(viewer: str) -> dict:
+    """One aggregate read for /halo/ — owner/guest split happens in halo.collect.
+
+    `outputs` is loaded for guests too because `delivery_summary` (channel-level
+    ok/failed counts) is derived from it; the raw items never leave the server.
+    """
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {
+            "services": pool.submit(_services),
+            "jobs": pool.submit(_jobs),
+            "activity": pool.submit(_activity, "7d"),
+            "activity_today": pool.submit(_activity, "24h"),
+            "usage": pool.submit(_usage),
+            "outputs": pool.submit(_outputs),
+        }
+        if viewer != "guest":
+            futures["errors"] = pool.submit(_errors)
+        loaded = {name: future.result() for name, future in futures.items()}
+
+    errors_data = loaded.get("errors") or {}
+    overview_data = overview.collect(
+        loaded["services"], loaded["jobs"], errors_data, {},
+        loaded["activity"], loaded["outputs"], loaded["usage"])
+    events_data = (events.collect(loaded["services"], loaded["jobs"], errors_data, {})
+                   if viewer != "guest" else {})
+    data = halo.collect(
+        loaded["services"], loaded["jobs"], loaded["activity"], loaded["activity_today"],
+        loaded["usage"], overview_data,
+        errors=errors_data,
+        outputs=loaded["outputs"],
+        events=events_data,
+        logs=_halo_logs() if viewer != "guest" else [],
+        viewer=viewer,
+    )
+    if viewer != "guest":
+        warnings: list[str] = []
+        for source in loaded.values():
+            if isinstance(source, dict):
+                warnings.extend(source.get("_warnings") or [])
+        if warnings:
+            data["_warnings"] = list(dict.fromkeys(warnings))
+    return data
+
+
+@app.get("/api/halo")
+def api_halo(request: Request):
+    viewer = _viewer(request)
+    if DEMO:
+        return _respond(halo.from_demo(demo.snapshot(), viewer), viewer=viewer)
+    try:
+        data = _halo_data(viewer)
+    except Exception as exc:
+        dlog.exception("halo 聚合失败")
+        return _respond({"error": redact(f"{type(exc).__name__}: {exc}")[:240]},
+                        ["halo 聚合失败"], viewer=viewer)
+    return _respond(data, viewer=viewer)
 
 
 def _warm_caches() -> None:

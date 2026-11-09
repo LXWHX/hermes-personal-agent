@@ -172,10 +172,12 @@ def _percentile(values: list[float], p: float) -> float | None:
     return ordered[index]
 
 
-def _merge_profiles(parts: list[dict]) -> tuple[list[dict], list[dict], float | None]:
+def _merge_profiles(parts: list[dict]) -> tuple[list[dict], list[dict], float | None, int | None]:
     grouped: dict[str, dict] = {}
     daily: dict[str, float] = {}
     any_cost = False
+    any_today = False
+    tokens_today = 0
     for part in parts:
         if part.get("error"):
             continue
@@ -191,6 +193,10 @@ def _merge_profiles(parts: list[dict]) -> tuple[list[dict], list[dict], float | 
         if part.get("cost"):
             any_cost = True
             target["cost_usd"] += part["cost"]
+        today = part.get("today")
+        if today is not None:
+            any_today = True
+            tokens_today += int(today.get("tin") or 0) + int(today.get("tout") or 0)
         for day in part.get("daily") or []:
             if day.get("cost"):
                 daily[day["day"]] = daily.get(day["day"], 0.0) + float(day["cost"])
@@ -203,7 +209,7 @@ def _merge_profiles(parts: list[dict]) -> tuple[list[dict], list[dict], float | 
             p["cost_usd"] = None
     trend = [{"date": day, "cost": cost} for day, cost in sorted(daily.items())]
     today_cost = daily.get(now().strftime("%Y-%m-%d")) if daily else None
-    return profiles, trend, today_cost
+    return profiles, trend, today_cost, (tokens_today if any_today else None)
 
 
 def _legacy_tokens() -> tuple[list[dict], str | None]:
@@ -275,9 +281,10 @@ def collect(include_quota: bool = True) -> dict:
             warnings.append("额度不可用：" + " / ".join(unavailable))
 
     parts = [p for p in (_one_db(path, role, name) for path, role, name in DB_SOURCES) if p]
-    profiles, trend, today_cost = _merge_profiles(parts)
+    profiles, trend, today_cost, tokens_today = _merge_profiles(parts)
     if not profiles:
         profiles, err = _legacy_tokens()
+        tokens_today = None
         if err:
             warnings.append(err)
 
@@ -291,6 +298,7 @@ def collect(include_quota: bool = True) -> dict:
     return {
         "profiles": profiles,
         "quota": quota,
+        "tokens_today": tokens_today,
         "today_cost_usd": today_cost if any_cost else None,
         "cost_trend": trend if any_cost else [],
         "estimate_note": note,

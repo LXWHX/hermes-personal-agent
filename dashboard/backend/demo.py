@@ -321,6 +321,7 @@ def usage() -> dict:
             {"label": "小黑盒 / biubiu", "key": "sidecar", "remaining": 86, "rolling": 9, "weekly": 14, "monthly": 12, "resets_at": _at(0, 0, 5)[:10], "available": True},
         ],
         "today_cost_usd": 5.98,
+        "tokens_today": 214_600,
         "cost_trend": [{"date": (now() - timedelta(days=6 - i)).strftime("%Y-%m-%d"), "cost": c} for i, c in enumerate([3.2, 4.8, 2.9, 6.1, 5.4, 4.2, 5.98])],
         "estimate_note": "本地按 token 估算，与账单可能存在 ±5% 偏差",
     }
