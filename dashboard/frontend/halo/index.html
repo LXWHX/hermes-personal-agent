@@ -55,7 +55,9 @@ header{display:block;border-bottom:1px solid var(--line);padding:8px 18px 0;back
 .brand p{margin:3px 0 9px;font-size:8px;color:var(--dim);letter-spacing:1.1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kpi{padding:0 10px 9px;position:relative}
 .kpi .k{font-size:9px;color:var(--dim);letter-spacing:1.2px}
-.kpi .v{font-size:14px;font-weight:800;color:var(--white);font-variant-numeric:tabular-nums}
+.kpi .v{font-size:14px;font-weight:800;color:var(--white);font-variant-numeric:tabular-nums;white-space:nowrap}
+.kpi .v small{font-size:7px;font-weight:600;color:var(--dim);margin-left:5px;letter-spacing:.4px}
+.kpi .v small.err{color:var(--pink)}
 .kpi .v.pink{color:var(--pink)}
 .kpi .seg{position:absolute;left:10px;right:0;bottom:-1px;height:2px;background:var(--line)}
 .kpi .seg i{display:block;height:100%;background:var(--text);width:0;transition:width 1.2s ease}
@@ -177,7 +179,7 @@ header{display:block;border-bottom:1px solid var(--line);padding:8px 18px 0;back
       <span class="topbar__sep">/</span>
       <span class="cn">READ ONLY · ASIA/SHANGHAI</span>
       <span class="topbar__spacer"></span>
-      <span class="halo-state" id="haloState" data-state="demo"><i></i><b id="haloStateText">DEMO</b></span>
+      <span class="halo-state" id="haloState" data-state="connecting"><i></i><b id="haloStateText">CONNECTING</b></span>
       <span class="topbar__sep">/</span>
       <span id="haloUpdated" class="tabular">—</span>
       <span class="topbar__sep credit-slot">/</span>
@@ -347,6 +349,16 @@ if (matchMedia('(max-width: 1000px)').matches) {
   C.flyerCount = +(C.flyerCount * 0.55).toFixed(2);
   C.burstSize = +(C.burstSize * 0.75).toFixed(2);
   C.bokeh = Math.round(C.bokeh * 0.6);
+}
+// 4K / high-DPI wall: fewer particles and slightly softer glow (same look)
+if ((window.screen && window.screen.width >= 3200) ||
+    (window.innerWidth * (window.devicePixelRatio || 1) >= 3200)) {
+  C.runnerCount = Math.round(C.runnerCount * 0.65);
+  C.cometPerBeat = +(C.cometPerBeat * 0.75).toFixed(2);
+  C.cometBurst = Math.round(C.cometBurst * 0.75);
+  C.hazeCount = Math.round(C.hazeCount * 0.7);
+  C.bokeh = Math.round(C.bokeh * 0.7);
+  C.glow = +(C.glow * 0.85).toFixed(2);
 }
 const zf = z => 1 + (z - 1) * C.camZoom;
 
@@ -1274,6 +1286,7 @@ function drawCallout() {
   S.fillStyle = '#fff'; S.fillRect(anchor.x - 1.5, anchor.y - 1.5, 3, 3);
 }
 setInterval(() => {
+  if (document.hidden) return;
   chkEl.style.opacity = 0;
   setTimeout(() => {
     chkI = (chkI + 1) % CHECKS.length;
@@ -1285,12 +1298,19 @@ setInterval(() => {
 
 /* =========================================================
    HERMES DATA LAYER
-   Phase 1: STATE is null -> every slot prints "—".
-   Phase 3 wires /api/halo into renderAll(state); no random telemetry.
+   Phase 3: /api/halo -> renderAll(state). No random telemetry.
    ========================================================= */
 const DASH = '—';
+const HALO_API = '/api/halo';
+const REFRESH_MS = 20000;
+const FETCH_TIMEOUT_MS = 8000;
+const DEMO_PARAM = new URLSearchParams(location.search).get('demo') === '1';
+const HALO_URL = DEMO_PARAM ? `${HALO_API}?demo=1` : HALO_API;
 let STATE = null;
-const HISTORY = { quota: [[], [], []] };
+const HISTORY = { quota: [[], [], []], activity: [] };
+let pollTimer = null;
+let fetching = false;
+let lastOkClock = DASH;
 const KPI_SCALE = { messages: 200, review: 6 };
 const KPI_EL = [0, 1, 2, 3, 4].map(i => document.getElementById('k' + i));
 const SEG_EL = [...document.querySelectorAll('.kpi .seg i')];
@@ -1328,6 +1348,14 @@ const fmtClock = iso => {
 };
 const RESULT_LABEL = { success: 'OK', silent: 'SILENT', failed: 'FAIL', skipped: 'SKIP', unknown: '—' };
 const resultLabel = v => RESULT_LABEL[v] || (v ? String(v).toUpperCase().slice(0, 6) : DASH);
+function recentJobs(state, limit) {
+  const rows = (state && state.jobs) || [];
+  return rows
+    .filter(job => job && job.last_run)
+    .sort((a, b) => String(b.last_run).localeCompare(String(a.last_run)))
+    .slice(0, limit)
+    .reverse();
+}
 
 /* ---------- header ---------- */
 function kpiSeg(i, pct) { if (SEG_EL[i]) SEG_EL[i].style.width = clampPct(pct) + '%'; }
@@ -1335,7 +1363,10 @@ function renderKpi(summary) {
   const s = summary || {};
   KPI_EL[0].textContent = fmt(s.messages_today);
   KPI_EL[1].textContent = s.roles_online == null ? DASH : `${fmt(s.roles_online)} / ${fmt(s.roles_total)}`;
-  KPI_EL[2].textContent = fmt(s.jobs_total);
+  const failed = s.jobs_failed == null ? null : Number(s.jobs_failed);
+  const failNote = failed == null ? '' :
+    `<small class="${failed > 0 ? 'err' : ''}">${failed > 0 ? `${failed} FAIL` : 'CLEAR'}</small>`;
+  KPI_EL[2].innerHTML = s.jobs_total == null ? DASH : `${esc(fmt(s.jobs_total))}${failNote}`;
   KPI_EL[3].textContent = s.services_online == null ? DASH : `${fmt(s.services_online)} / ${fmt(s.services_total)}`;
   let review = DASH;
   if (s.approvals_pending != null) review = Number(s.approvals_pending) + Number(s.jobs_failed || 0);
@@ -1365,10 +1396,10 @@ function renderFeed(state) {
   const guest = state.viewer === 'guest';
   let rows = [];
   if (guest) {
-    rows = (state.jobs || []).slice(-14).reverse().map(j => ({
+    rows = recentJobs(state, 14).map(j => ({
       time: j.last_run, tag: 'JOB',
       cls: j.result === 'failed' ? 'err' : j.result === 'success' || j.result === 'silent' ? 'ok' : '',
-      text: `${resultLabel(j.result)} · 秘密任务`,
+      text: `${resultLabel(j.result)} · ${j.name || '秘密任务'}`,
     }));
   } else {
     rows = (state.events || []).slice(0, 14).reverse().map(e => ({
@@ -1393,7 +1424,7 @@ function renderLog(state) {
   const guest = state.viewer === 'guest';
   let lines = [];
   if (guest) {
-    lines = (state.jobs || []).slice(-12).map(j => `${resultLabel(j.result)} · 秘密任务 · ${fmtClock(j.last_run)}`);
+    lines = recentJobs(state, 12).map(j => `${resultLabel(j.result)} · ${j.name || '秘密任务'} · ${fmtClock(j.last_run)}`);
   } else {
     lines = (state.logs || []).slice(-12).map(l => (l && l.line) ? l.line : String(l || ''));
   }
@@ -1505,8 +1536,16 @@ function channelCells(state, target) {
   }
   return out;
 }
+function channelCellsGuest(state, target) {
+  const row = (state.delivery_summary || []).find(r => r.target === target);
+  if (!row) return [CELL.none, CELL.none, CELL.none, CELL.none, CELL.none, CELL.none];
+  const ok = Math.max(0, Math.min(6, Number(row.ok) || 0));
+  const failed = Math.max(0, Math.min(6 - ok, Number(row.failed) || 0));
+  return Array.from({ length: 6 }, (_, i) => i < ok ? CELL.on : (i < ok + failed ? CELL.err : CELL.none));
+}
 function buildUnitRows(state) {
   if (!state) return UNIT_ROWS.map(([id, label]) => ({ id, label, cells: [CELL.none, CELL.none, CELL.none, CELL.none, CELL.none, CELL.none], status: DASH, cls: '' }));
+  const guest = state.viewer === 'guest';
   const rows = [];
   const services = (state.services || []).slice(0, 6);
   services.forEach((s, i) => {
@@ -1525,7 +1564,8 @@ function buildUnitRows(state) {
   while (rows.length < 9) rows.push({ id: String(rows.length + 1).padStart(2, '0'), label: DASH, cells: [CELL.none, CELL.none, CELL.none, CELL.none, CELL.none, CELL.none], status: DASH, cls: '' });
   const channels = (state.delivery_summary || []).slice(0, 3);
   channels.forEach((c, i) => {
-    rows.push({ id: String(10 + i).padStart(2, '0'), label: shortChannel(c.target), cells: channelCells(state, c.target),
+    rows.push({ id: String(10 + i).padStart(2, '0'), label: shortChannel(c.target),
+      cells: guest ? channelCellsGuest(state, c.target) : channelCells(state, c.target),
       status: `${fmt(c.ok)}/${fmt((c.ok || 0) + (c.failed || 0))}`, cls: (c.failed || 0) ? 'err' : 'w' });
   });
   while (rows.length < 12) rows.push({ id: String(rows.length + 1).padStart(2, '0'), label: DASH, cells: [CELL.none, CELL.none, CELL.none, CELL.none, CELL.none, CELL.none], status: DASH, cls: '' });
@@ -1780,9 +1820,73 @@ function setHaloStatus(kind, text, updated) {
   haloUpdatedEl.textContent = updated || DASH;
 }
 
-/* Phase 1: static preview, no API call. */
+/* ---------- /api/halo polling ---------- */
+function setBadgeFromPayload(payload) {
+  const clock = fmtClock(payload && payload.generated_at);
+  lastOkClock = clock !== DASH ? clock : new Date().toTimeString().slice(0, 5);
+  if (payload && payload.demo) {
+    setHaloStatus('demo', 'DEMO', `DEMO · ${lastOkClock}`);
+  } else {
+    setHaloStatus('live', 'LIVE', `SYNC ${lastOkClock}`);
+  }
+}
+
+async function fetchHalo() {
+  if (fetching) return;
+  fetching = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(HALO_URL, {
+      cache: 'no-store',
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    if (!payload || payload.ok !== true || !payload.data) throw new Error('invalid payload');
+    const state = Object.assign({}, payload.data, {
+      viewer: payload.viewer || payload.data.viewer || 'owner',
+      generated_at: payload.generated_at,
+      demo: payload.demo === true,
+    });
+    renderAll(state);
+    setBadgeFromPayload(payload);
+    if (DEMO_PARAM && !payload.demo) {
+      console.info('[halo] ?demo=1 ignored: backend is not in DEMO mode');
+    }
+  } catch (err) {
+    if (STATE) {
+      setHaloStatus('stale', 'STALE', `LAST ${lastOkClock} · RETRYING`);
+    } else {
+      renderAll(null);
+      setHaloStatus('stale', 'STALE', 'NO DATA · RETRYING');
+    }
+    console.warn('[halo] fetch failed:', err && err.message ? err.message : err);
+  } finally {
+    clearTimeout(timeout);
+    fetching = false;
+  }
+}
+
+function stopPolling() {
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+}
+
+function schedulePoll() {
+  stopPolling();
+  if (document.hidden) return;
+  pollTimer = setTimeout(() => { fetchHalo().finally(schedulePoll); }, REFRESH_MS);
+}
+
+function pollNow() {
+  stopPolling();
+  fetchHalo().finally(schedulePoll);
+}
+
 renderAll(null);
-setHaloStatus('demo', 'DEMO', 'STATIC PREVIEW');
+setHaloStatus('connecting', 'CONNECTING', 'AWAITING /API/HALO');
+pollNow();
 
 /* =========================================================
    LOOP
@@ -1803,7 +1907,12 @@ function resizeAll() {
   DPR = Math.min(window.devicePixelRatio || 1, 1.5); resizeStage(); resizePanels(); ready = true;
   if (!started) { started = true; last = performance.now(); requestAnimationFrame(frame); }
 }
-document.addEventListener('visibilitychange', () => { hidden = document.hidden; if (!hidden) last = performance.now(); });
+document.addEventListener('visibilitychange', () => {
+  hidden = document.hidden;
+  if (hidden) { stopPolling(); return; }
+  last = performance.now();
+  pollNow();
+});
 new ResizeObserver(() => { clearTimeout(rzT); rzT = setTimeout(resizeAll, 120); }).observe(document.getElementById('stageWrap'));
 (document.fonts ? document.fonts.ready : Promise.resolve()).then(resizeAll);
 
