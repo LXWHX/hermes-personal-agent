@@ -1,0 +1,1822 @@
+<!doctype html>
+<!--
+  HALOFLUX - Copyright (c) 2026 Ryder191 (RYDER CODE / Ms MAIKEBAIs CAT). All rights reserved.
+
+  Source code and audiovisual design are original works protected by copyright.
+  Licensed under the PolyForm Noncommercial License 1.0.0 (see LICENSE).
+  Noncommercial use only. ANY COMMERCIAL USE IS STRICTLY PROHIBITED.
+  Keep this notice and credit "HALOFLUX by Ryder191" when sharing or remixing.
+
+  MODIFIED COPY / 修改版:
+  This build is modified for the Hermes personal dashboard (agent ops wall).
+  Original: https://github.com/Ryder191/haloflux
+  Modifications: rebranded copy, BGM/audio removed, fake-data generators removed,
+  panels re-bound to the owner's own read-only telemetry. Noncommercial use only.
+
+  源代码与视觉设计均为原创作品，受著作权保护。按 PolyForm Noncommercial 1.0.0 授权。
+  仅限非商业用途，严格禁止任何商业用途。转载或二创须保留本声明并注明出处。
+  本文件为 Hermes 个人监控台的修改版：改文案、移除 BGM、移除随机数据生成器、
+  面板改接本人只读遥测数据。仅限非商业用途，详见 LICENSE。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>HERMES — Agent Ops</title>
+<style>
+:root{
+  --bg:#08090b; --panel:#0e0f12; --line:#25282e; --line2:#3a3e46;
+  --text:#cfd2d8; --dim:#6b6f78; --faint:#3f434a; --white:#f4f5f7;
+  --pink:#f0a6c6; --teal:#98e0cf;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:ui-monospace,"Cascadia Mono","SF Mono",Consolas,"Liberation Mono",monospace;overflow:hidden}
+.app{display:grid;grid-template-rows:auto minmax(0,1fr) auto;height:100vh}
+
+/* ---------- header ---------- */
+header{display:block;border-bottom:1px solid var(--line);padding:8px 18px 0;background:#0a0b0d}
+.hud{display:grid;grid-template-columns:minmax(240px,1.7fr) repeat(5,minmax(0,1fr));align-items:end}
+.topbar{display:flex;align-items:center;gap:9px;min-height:18px;margin:0 0 8px;padding:0 0 7px;border-bottom:1px solid var(--line);font-size:9px;letter-spacing:1px;color:var(--dim);white-space:nowrap;overflow:hidden}
+.topbar__spacer{flex:1}
+.topbar__sep{color:var(--faint)}
+.topbar a{color:var(--text);border-bottom:1px solid transparent;transition:color .2s,border-color .2s}
+.topbar a:hover,.topbar a:focus-visible{color:var(--white);border-bottom-color:var(--line2)}
+.topbar .cn{font-size:8px;color:var(--faint)}
+.halo-state{display:inline-flex;align-items:center;gap:5px;color:var(--text);font-weight:700}
+.halo-state i{display:inline-block;width:5px;height:5px;background:var(--white)}
+.halo-state[data-state="demo"] i{background:var(--pink)}
+.halo-state[data-state="stale"] i{background:transparent;border:1px solid var(--pink)}
+.halo-state[data-state="stale"]{color:var(--pink)}
+.halo-state[data-state="connecting"] i{background:var(--dim)}
+.brand h1{white-space:nowrap;margin:0;font-size:21px;font-weight:800;letter-spacing:1.5px;color:var(--white)}
+.brand p{margin:3px 0 9px;font-size:8px;color:var(--dim);letter-spacing:1.1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi{padding:0 10px 9px;position:relative}
+.kpi .k{font-size:9px;color:var(--dim);letter-spacing:1.2px}
+.kpi .v{font-size:14px;font-weight:800;color:var(--white);font-variant-numeric:tabular-nums}
+.kpi .v.pink{color:var(--pink)}
+.kpi .seg{position:absolute;left:10px;right:0;bottom:-1px;height:2px;background:var(--line)}
+.kpi .seg i{display:block;height:100%;background:var(--text);width:0;transition:width 1.2s ease}
+
+/* ---------- stage ---------- */
+.stage{position:relative;min-height:0;overflow:hidden}
+#stage{position:absolute;inset:0;width:100%;height:100%;display:block}
+.stage::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px),
+             radial-gradient(ellipse at 40% 50%,transparent 55%,rgba(0,0,0,.55) 100%)}
+.ov{position:absolute;font-size:9px;letter-spacing:1px;color:var(--text);pointer-events:none;z-index:2}
+.chk{left:0;top:0;will-change:transform;background:rgba(8,9,11,.85);border:1px solid var(--line2);padding:5px 8px;transition:opacity .4s}
+.chk b{display:block;font-size:8px;color:var(--dim);font-weight:600;margin-bottom:3px}
+.chk span{font-size:12px;color:var(--white);font-weight:600;white-space:nowrap}
+.status{right:16px;bottom:12px;text-align:right}
+.status .big{font-size:11px;color:var(--white);font-weight:800;text-shadow:0 0 3px rgba(0,0,0,.95),0 0 9px rgba(0,0,0,.85)}
+.status .sm{color:var(--dim);font-size:8px;margin-top:2px;text-shadow:0 0 3px rgba(0,0,0,.9),0 0 8px rgba(0,0,0,.75)}
+
+/* ---------- panels ---------- */
+.panels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:8px 12px 12px;border-top:1px solid var(--line);background:#0a0b0d}
+.credits{display:flex;align-items:center;gap:7px;padding:5px 12px 6px;border-top:1px solid var(--line);background:#0a0b0d;font-size:8px;letter-spacing:.5px;color:var(--faint);white-space:nowrap;overflow:hidden}
+.credits a{color:var(--dim);border-bottom:1px solid var(--line2);transition:color .2s,border-color .2s}
+.credits a:hover,.credits a:focus-visible{color:var(--white);border-bottom-color:var(--text)}
+.credits__spacer{flex:1}
+.credits .cn{color:var(--faint)}
+.p{border:1px solid var(--line);background:var(--panel);padding:7px 10px 6px;height:clamp(118px,17vh,168px);display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.p h3{margin:0 0 5px;font-size:9px;font-weight:800;letter-spacing:1.3px;color:var(--white);white-space:nowrap}
+.p .cap{margin-top:auto;font-size:8px;color:var(--dim);padding-top:3px;white-space:nowrap;overflow:hidden}
+.p canvas{width:100%;flex:1;min-height:0;display:block}
+
+.feed{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:flex-end;font-size:9px;line-height:1.4;overflow:hidden}
+.feed div{white-space:nowrap;color:var(--dim)}
+.feed div:last-child{color:var(--white);font-weight:600}
+.feed .empty{color:var(--faint);letter-spacing:1.2px}
+.feed .empty b{color:var(--dim);font-weight:600}
+.n{color:var(--faint);margin-right:8px}
+.vb{display:inline-block;width:42px;font-weight:800}
+.vb.build{color:var(--pink)} .vb.check{color:var(--text)} .vb.read{color:var(--teal)} .vb.qa{color:var(--white)}
+.vb.err{color:var(--pink)} .vb.ok{color:var(--teal)} .vb.warn{color:var(--text)}
+
+.stats{display:flex;gap:4px;margin-top:4px}
+.stats span{flex:1;font-size:8px;border:1px solid var(--line2);padding:1px 5px;color:var(--dim);white-space:nowrap;overflow:hidden}
+.stats b{color:var(--white);font-weight:700;font-variant-numeric:tabular-nums}
+
+.code{flex:1;min-height:0;font-size:9px;line-height:1.45;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
+.code div{white-space:nowrap}
+.code .ln{color:var(--faint);margin-right:10px}
+.code .fn{color:var(--white);font-weight:800}
+.code .op{color:var(--dim)}
+.caret{display:inline-block;width:6px;height:10px;background:var(--white);vertical-align:-1px;animation:bl 1s steps(1) infinite}
+@keyframes bl{50%{opacity:0}}
+
+.routes{display:grid;grid-template-columns:1.5fr repeat(4,minmax(0,1fr));gap:3px 5px;font-size:8px;align-content:start}
+.routes .h{color:var(--dim);font-weight:800;letter-spacing:.6px;white-space:nowrap;overflow:hidden}
+.routes .nm{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip{display:inline-block;padding:0 4px;border:1px solid var(--line2);border-radius:2px;color:var(--faint);line-height:11px;transition:all .3s}
+.chip.on{background:#d6d8dd;color:#000;border-color:#d6d8dd}
+.chip.done{background:#2b2e34;color:var(--text);border-color:#2b2e34}
+.chip.pk{background:rgba(240,166,198,.25);color:var(--pink);border-color:rgba(240,166,198,.5)}
+
+.agents{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-size:8px;align-content:start}
+.ag{display:flex;align-items:center;gap:5px;white-space:nowrap;min-width:0}
+.ag .id{color:var(--faint);width:12px;flex:0 0 12px} .ag .rl{width:48px;flex:0 0 48px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.ag .cells{display:flex;gap:1px;flex:0 0 auto}
+.ag .cells i{width:6px;height:6px;background:#1d1f24}
+.ag .st{color:var(--dim);overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ag .st.w{color:var(--white)}
+.ag .st.err{color:var(--pink)}
+
+@media (max-width:1000px){
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  .app{height:100vh;height:100dvh;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto;
+    padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+  .app>*{min-width:0}
+  header{padding:8px 14px 0}
+  .hud{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:end;gap:0}
+  .brand{grid-column:1/-1;margin-bottom:3px}
+  .brand h1{font-size:18px;letter-spacing:1px;line-height:1}
+  .brand p{display:none}
+  .kpi{padding:0 4px 7px}
+  .kpi .k{font-size:8px;letter-spacing:.7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .kpi .v{font-size:13px}
+  .kpi .seg{left:4px}
+  .stage{height:auto}
+  .status{right:10px;bottom:8px;padding:3px 6px;background:rgba(8,9,11,.78);border:1px solid var(--line)}
+  .status .big{font-size:9.5px}
+  .panels{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:8px;
+    padding:8px 12px calc(8px + env(safe-area-inset-bottom));scrollbar-width:none}
+  .panels::-webkit-scrollbar{display:none}
+  .p{flex:0 0 min(78vw,360px);height:118px;scroll-snap-align:start}
+  .credits{padding-bottom:calc(6px + env(safe-area-inset-bottom))}
+}
+@media (max-width:520px){
+  header{padding:8px 12px 0}
+  .topbar .topbar__sep{display:none}
+  .topbar{flex-wrap:wrap;overflow:visible;white-space:normal;row-gap:4px}
+  .status{right:10px;bottom:8px}
+}
+</style>
+<style>
+/* ---- Hermes build ---- */
+@media (min-width:1500px){ .brand h1{font-size:24px} .p h3{font-size:10px} .p .cap{font-size:8.5px} }
+@media (min-width:2100px){ .brand h1{font-size:28px;letter-spacing:2.5px} .kpi .v{font-size:17px}
+  .p{height:clamp(150px,19vh,230px)} }
+@media (max-width:720px){ .topbar .cn,.topbar .credit-slot{display:none} .topbar{gap:7px;font-size:8px}
+  .brand h1{font-size:14px}
+  .kpi .k{font-size:6.5px}
+  .kpi .v{font-size:11px}
+  .credits{font-size:7px;gap:5px} .credits .credits__tail,.credits .cn{display:none} }
+@media (max-width:520px){ .topbar .topbar__sep{display:none} .topbar{flex-wrap:wrap;overflow:visible;white-space:normal;row-gap:4px}
+  .status{right:10px;bottom:10px} }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="topbar">
+      <a href="/">← 返回监控台 <span class="cn">CONSOLE</span></a>
+      <span class="topbar__sep">/</span>
+      <span class="cn">READ ONLY · ASIA/SHANGHAI</span>
+      <span class="topbar__spacer"></span>
+      <span class="halo-state" id="haloState" data-state="demo"><i></i><b id="haloStateText">DEMO</b></span>
+      <span class="topbar__sep">/</span>
+      <span id="haloUpdated" class="tabular">—</span>
+      <span class="topbar__sep credit-slot">/</span>
+      <span class="cn credit-slot">HALOFLUX · MODIFIED</span>
+    </div>
+    <div class="hud">
+      <div class="brand"><h1>HERMES / AGENT OPS</h1><p>TELEGRAM · DISCORD · HEYBOX · BIUBIU / ONE BUS</p></div>
+      <div class="kpi"><div class="k">MESSAGES</div><div class="v" id="k0">—</div><div class="seg"><i></i></div></div>
+      <div class="kpi"><div class="k">AGENTS</div><div class="v pink" id="k1">—</div><div class="seg"><i></i></div></div>
+      <div class="kpi"><div class="k">JOBS</div><div class="v" id="k2">—</div><div class="seg"><i></i></div></div>
+      <div class="kpi"><div class="k">SERVICES</div><div class="v" id="k3">—</div><div class="seg"><i></i></div></div>
+      <div class="kpi"><div class="k">REVIEW</div><div class="v" id="k4">—</div><div class="seg"><i></i></div></div>
+    </div>
+  </header>
+
+  <div class="stage" id="stageWrap">
+    <canvas id="stage"></canvas>
+    <div class="ov chk" id="chk"><b id="chkK">GATEWAY</b><span id="chkV">—</span></div>
+    <div class="ov status"><div class="big" id="stBig">— / — SERVICES · — JOBS FAILED</div><div class="sm">independent agents · one event bus</div></div>
+  </div>
+
+  <section class="panels">
+    <div class="p"><h3>EVENT FEED</h3><div class="feed" id="feed"></div><div class="cap">owner: events · guest: masked jobs</div></div>
+    <div class="p"><h3>TOKEN FLOW</h3><canvas id="cAdv"></canvas>
+      <div class="stats" id="tokenStats"><span>IN <b id="tokIn">—</b></span><span>OUT <b id="tokOut">—</b></span><span>TOTAL <b id="tokAll">—</b></span></div></div>
+    <div class="p"><h3>EXEC LOG</h3><div class="code" id="code"></div></div>
+    <div class="p"><h3>SERVICE UPTIME</h3><canvas id="cDiff"></canvas><div class="cap">last 24h · 30min segments</div></div>
+    <div class="p"><h3>DELIVERY ROUTES</h3><div class="routes" id="routes"></div><div class="cap">sentinel → channel · success / failed</div></div>
+    <div class="p"><h3>QUOTA WINDOWS</h3><canvas id="cVal"></canvas><div class="cap">rolling / weekly / monthly · remaining</div></div>
+    <div class="p"><h3>UNITS / DISPATCH</h3><div class="agents" id="agents"></div><div class="cap">6 services · 3 roles · 3 channels</div></div>
+    <div class="p"><h3>ACTIVITY HEATMAP</h3><canvas id="cIdx"></canvas><div class="cap">7 days × 24 hours · messages</div></div>
+  </section>
+  <footer class="credits">
+    <a href="https://github.com/Ryder191/haloflux" target="_blank" rel="noopener noreferrer">HALOFLUX by Ryder191 (RYDER CODE / Ms MAIKEBAIs CAT)</a>
+    <span class="credits__tail">· modified for HERMES · PolyForm Noncommercial 1.0.0</span>
+    <span class="credits__spacer"></span>
+    <span class="cn">MODIFIED BUILD · NOINDEX · READ ONLY</span>
+  </footer>
+</div>
+
+<script>
+const TAU = Math.PI * 2, rnd = Math.random;
+const rr = (a, b) => a + rnd() * (b - a);
+const pick = a => a[(rnd() * a.length) | 0];
+const gauss = () => (rnd() + rnd() + rnd() - 1.5) / 1.5;
+let DPR = Math.min(window.devicePixelRatio || 1, 1.5);
+const FONT = 'ui-monospace,"Cascadia Mono","SF Mono",Consolas,"Liberation Mono",monospace';
+
+function mk(w, h) {
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.ceil(w * DPR)); c.height = Math.max(1, Math.ceil(h * DPR));
+  c.x = c.getContext('2d'); c.x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  return c;
+}
+function fit(c) {
+  const r = c.getBoundingClientRect();
+  c.width = Math.max(1, Math.round(r.width * DPR)); c.height = Math.max(1, Math.round(r.height * DPR));
+  const x = c.getContext('2d'); x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  c.w = r.width; c.h = r.height; c.x = x;
+  return c;
+}
+
+/* =========================================================
+   MAIN STAGE
+   ========================================================= */
+const stage = document.getElementById('stage'); let S = stage.getContext('2d'); const S_MAIN = S;
+let W, H, cx, cy, R, RO, RMAX, thV, thS;
+let webBase, webLayers = [], layerEnv = [0, 0, 0], trailC, glowC, laneC;
+let curves = [], runners = [], comets = [], cards = [], wedges = [], pulses = [];
+let webRot = 0, ringRot = 0, ringVel = 0, OSTEP = 0.0038;
+const GS = 3; // glow buffer downscale
+const FS = 0.5; let farC; // far-layer buffer (depth of field)
+let ROT = false, SW = 0, SH = 0;   // portrait phones: scene is drawn rotated -90°
+function setXf(ctx, d, z, tx, ty) {
+  if (ROT && ctx === S_MAIN) ctx.setTransform(0, -d * z, d * z, 0, ty, SH * d - tx);
+  else ctx.setTransform(d * z, 0, 0, d * z, tx, ty);
+}
+const HAS_FILTER = 'filter' in S;
+const easeIO = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const easeO = t => 1 - Math.pow(1 - t, 3);
+
+/* ---------- live configuration (driven by the console) ---------- */
+// [key, label, min, max, step, group, rebuild]
+const PARAMS = [
+  ['tempo', '整体节拍速度', 0.4, 2.5, 0.05, '全局'],
+  ['camera', '自动运镜 (0关 1开)', 0, 1, 1, '全局'],
+  ['camZoom', '运镜推近幅度', 0, 2, 0.05, '全局'],
+  ['glow', '柔光层强度', 0, 1.5, 0.05, '全局'],
+  ['scan', '扫描线 (0关 1开)', 0, 1, 1, '全局'],
+
+  ['ringSpeed', '圆环转动幅度/速度', 0, 3, 0.05, '圆环'],
+  ['ringPause', '圆环停顿时长', 0, 3, 0.05, '圆环'],
+  ['ringWidth', '环带厚度', 0.6, 1.6, 0.02, '圆环', 'resize'],
+  ['rimBright', '内外缘细线亮度', 0, 2, 0.05, '圆环'],
+  ['rimWidth', '内外缘细线带宽度', 0.3, 2.5, 0.05, '圆环', 'slots'],
+  ['dataFlicker', '数据块刷新/闪烁', 0, 4, 0.1, '圆环'],
+
+  ['webBright', '底层网线亮度', 0.1, 3, 0.05, '圈内', 'web'],
+  ['webPulseBase', '网线闪烁层基础亮度', 0, 1, 0.02, '圈内'],
+  ['webPulseAmp', '网线闪烁层节拍亮度', 0, 1, 0.02, '圈内'],
+  ['webSpin', '网线整体转速', 0, 5, 0.1, '圈内'],
+  ['runnerCount', '单独亮线 数量', 0, 900, 1, '圈内'],
+  ['runnerBright', '单独亮线 亮度', 0, 2, 0.05, '圈内'],
+  ['runnerWidth', '单独亮线 粗细', 0.3, 3, 0.05, '圈内'],
+  ['runnerSpeed', '单独亮线 速度', 0.1, 4, 0.05, '圈内'],
+  ['runnerVariety', '单独亮线 速度差异', 0, 1, 0.05, '圈内'],
+  ['cometPerBeat', '成组光束 每拍数量', 0, 6, 0.1, '圈内'],
+  ['cometBurst', '成组光束 重拍爆发数', 0, 12, 0.5, '圈内'],
+  ['cometTrickle', '成组光束 拍间零星(每秒)', 0, 6, 0.1, '圈内'],
+  ['cometLines', '成组光束 每组线数', 0.3, 3, 0.05, '圈内'],
+  ['cometWidth', '成组光束 宽度', 0.3, 3, 0.05, '圈内'],
+  ['cometBright', '成组光束 亮度', 0.1, 2.5, 0.05, '圈内'],
+  ['cometGlow', '成组光束 柔光', 0, 3, 0.05, '圈内'],
+  ['cometSpeed', '成组光束 速度', 0.3, 3, 0.05, '圈内'],
+  ['cometFollow', '成组光束 跟随圆环 (0/1)', 0, 1, 1, '圈内'],
+
+  ['beamBright', '伸缩光束 亮度', 0, 2.5, 0.05, '环外'],
+  ['beamLen', '伸缩光束 长度', 0.2, 1.8, 0.05, '环外'],
+  ['beamWidth', '伸缩光束 线粗细', 0.3, 3, 0.05, '环外'],
+  ['beamBounce', '回弹波浪层 强度', 0, 2, 0.05, '环外'],
+  ['beamGlow', '伸缩光束 柔光', 0, 6, 0.1, '环外'],
+  ['dashBright', '流动短线 亮度', 0, 2, 0.05, '环外'],
+  ['hazeCount', '宽光带 数量', 0, 30, 1, '环外'],
+  ['hazeBright', '宽光带 亮度', 0, 3, 0.05, '环外'],
+  ['flyerCount', '飞出流线(单独) 数量', 0, 3, 0.05, '环外', 'flyers'],
+  ['flyerBright', '飞出流线(单独) 亮度', 0, 3, 0.05, '环外'],
+  ['flyerWidth', '飞出流线 粗细', 0.3, 3, 0.05, '环外'],
+  ['flyerSpeed', '飞出流线 速度', 0.2, 3, 0.05, '环外'],
+  ['burstRate', '飞出流线(成组) 频率', 0, 5, 0.1, '环外'],
+  ['burstSize', '飞出流线(成组) 每组数量', 0.2, 3, 0.05, '环外'],
+  ['burstBright', '飞出流线(成组) 亮度', 0, 2.5, 0.05, '环外'],
+  ['flareRate', '根部闪光 频率', 0, 5, 0.1, '环外'],
+  ['flareBright', '根部闪光 亮度', 0, 2, 0.05, '环外'],
+  ['rimDensity', '内外缘细线 密度', 0.3, 3, 0.05, '圆环'],
+  ['depthBlur', '远景虚化 (环外远层)', 0, 5, 0.1, '空间层次'],
+  ['depthDim', '远景亮度', 0, 1.5, 0.05, '空间层次'],
+  ['webBlur', '圈内底层虚化', 0, 4, 0.1, '空间层次', 'web'],
+  ['parallax', '视差 (运镜时远近错位)', 0, 1.5, 0.05, '空间层次'],
+  ['bokeh', '前景光斑 数量', 0, 80, 1, '空间层次'],
+  ['bokehBright', '前景光斑 亮度', 0, 3, 0.05, '空间层次'],
+  ['atmos', '空间雾气', 0, 3, 0.05, '空间层次'],
+  ['ringShadow', '圆环遮挡阴影', 0, 2, 0.05, '空间层次'],
+  ['vignette', '暗角', 0, 1.5, 0.05, '空间层次'],
+];
+const BASE = {
+  tempo: 1, camera: 1, camZoom: 1, glow: 1, scan: 1,
+  ringSpeed: 1, ringPause: 1, ringWidth: 1, rimBright: 1, rimWidth: 1, dataFlicker: 1,
+  webBright: 1, webPulseBase: 0.15, webPulseAmp: 0.85, webSpin: 1,
+  runnerCount: 336, runnerBright: 1, runnerWidth: 1, runnerSpeed: 1, runnerVariety: 1,
+  cometPerBeat: 1.1, cometBurst: 4, cometTrickle: 0, cometLines: 1, cometWidth: 1, cometBright: 1, cometGlow: 1.1, cometSpeed: 1, cometFollow: 0,
+  beamBright: 1, beamBounce: 1, beamLen: 1, beamWidth: 1, beamGlow: 1, dashBright: 1, hazeCount: 8, hazeBright: 1,
+  flyerCount: 1, flyerBright: 1, flyerWidth: 1, flyerSpeed: 1, burstRate: 1, burstSize: 1, burstBright: 1, flareRate: 1, flareBright: 1,
+  rimDensity: 1, depthBlur: 1.4, depthDim: 0.9, webBlur: 0.7, parallax: 0.6, bokeh: 16, bokehBright: 1, atmos: 1, ringShadow: 1, vignette: 0.7,
+};
+const PRESETS = {
+  A: { ...BASE, webBright: 1.25, webPulseBase: 0.3, webPulseAmp: 0.4, runnerCount: 45, runnerVariety: 0,
+       cometPerBeat: 2.5, cometBurst: 5, cometTrickle: 1.6, cometFollow: 1, cometGlow: 0.85 },
+  B: { ...BASE },
+};
+// 你的默认效果：把控制台「导出」的 values 粘贴进来替换 null，发给任何电脑打开都会默认使用它
+const BAKED_MINE = {tempo: 2.5, camera: 1, camZoom: 1, glow: 1.1, scan: 1, ringSpeed: 3, ringPause: 1.2, ringWidth: 1.3, rimBright: 1.8, rimWidth: 1.3, dataFlicker: 1, webBright: 0.9, webPulseBase: 0.1, webPulseAmp: 0.8, webSpin: 1, runnerCount: 788, runnerBright: 0.5, runnerWidth: 1, runnerSpeed: 0.6, runnerVariety: 0.4, cometPerBeat: 2.3, cometBurst: 9, cometTrickle: 1.5, cometLines: 1, cometWidth: 1, cometBright: 1, cometGlow: 1.1, cometSpeed: 0.8, cometFollow: 1, beamBright: 1.8, beamLen: 1.8, beamWidth: 0.7, beamBounce: 2, beamGlow: 3.5, dashBright: 1.9, hazeCount: 22, hazeBright: 1.5, flyerCount: 3, flyerBright: 3, flyerWidth: 1.4, flyerSpeed: 2.2, burstRate: 3.5, burstSize: 3, burstBright: 2.5, flareRate: 3.5, flareBright: 2, rimDensity: 1.2, depthBlur: 0, depthDim: 0.1, webBlur: 0, parallax: 0, bokeh: 0, bokehBright: 0, atmos: 0, ringShadow: 0, vignette: 0};   // 2026-10-21 定稿默认
+if (BAKED_MINE) PRESETS.MINE = { ...BASE, ...BAKED_MINE };
+const C = { ...(PRESETS.MINE || PRESETS.B) };
+// phones: fewer particles, same look (from HALOFLUX mobile.html)
+if (matchMedia('(max-width: 1000px)').matches) {
+  C.runnerCount = Math.round(C.runnerCount * 0.5);
+  C.flyerCount = +(C.flyerCount * 0.55).toFixed(2);
+  C.burstSize = +(C.burstSize * 0.75).toFixed(2);
+  C.bokeh = Math.round(C.bokeh * 0.6);
+}
+const zf = z => 1 + (z - 1) * C.camZoom;
+
+/* ---------- rhythm: an uneven beat clock drives everything ---------- */
+const PATTERN = [0.5, 0.25, 0.25, 0.5, 0.5, 0.75, 0.25, 0.25, 0.25, 1.0];
+let beatT = 0.4, beatI = 0, sinceBeat = 9, beatN = 0, env = 0;
+function updateBeat(dt) {
+  beatT -= dt; sinceBeat += dt;
+  if (beatT <= 0) { beatT += PATTERN[beatI++ % PATTERN.length] * 0.92 / C.tempo; sinceBeat = 0; beatN++; onBeat(); }
+  env = Math.exp(-sinceBeat * 4.5);
+}
+function onBeat() {
+  // ring: kick every other beat → stepped, fast rotation
+  if (rot.t >= rot.dur && rot.hold <= 0) ringMove();
+  // comets come in bursts
+  const n = Math.round((beatN % 4 === 0 ? C.cometBurst : C.cometPerBeat) * rr(0.6, 1.4));
+  for (let i = 0; i < n; i++) setTimeout(spawnComet, i * rr(30, 90));
+  // web layers shimmer
+  layerEnv[(rnd() * 3) | 0] = 1;
+  if (beatN % 4 === 0) layerEnv = layerEnv.map(() => rr(0.6, 1));
+  // outer: travelling wave + random wedge hits
+  const dir = rnd() < 0.5 ? 1 : -1, big = beatN % 8 === 0;
+  pulses.push({ c: dir > 0 ? -thS - 0.15 : thS + 0.15, v: dir * rr(0.7, 1.6) * (big ? 0.7 : 1), w: big ? rr(0.25, 0.4) : rr(0.05, 0.16), amp: big ? 1 : rr(0.45, 0.9), life: rr(1.2, 2.0), L: 0 });
+  pulses.forEach(p => p.L || (p.L = p.life));
+  onBeatOuter();
+  // ring cards
+  for (let i = 0; i < Math.round(6 * C.dataFlicker); i++) pick(slots).c = null;
+  for (let i = 0; i < Math.round(2 * C.dataFlicker); i++) pick(slots).flash = rr(0.35, 0.7);
+}
+
+/* ---------- camera: automatic push-in / pull-out shots ---------- */
+const cam = { x: 0, y: 0, z: 1 };
+let shots = [], shotI = 0, shotT = 0, camPhase = 'hold', camFrom = null;
+function buildShots() {
+  const P = (a, r) => ({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+  const mid = (R + RO) / 2;
+  shots = [
+    { x: W / 2, y: H / 2, z: 1, hold: 4.5 },
+    { ...P(-thS * 0.45, mid), z: 2.3, hold: 3.4 },
+    { ...P(0.04, RO + (RMAX - RO) * 0.3), z: 1.6, hold: 3.2 },
+    { x: W / 2, y: H / 2, z: 1, hold: 3.0 },
+    { ...P(0.22, R * 0.8), z: 1.9, hold: 3.4 },
+    { ...P(thS * 0.5, mid + 10), z: 2.8, hold: 3.0 },
+    { ...P(-0.12, RO + 40), z: 1.35, hold: 3.2 },
+  ];
+  shotI = 0; shotT = 0; camPhase = 'hold';
+  Object.assign(cam, shots[0]);
+}
+function clampCam() {
+  const hw = W / (2 * cam.z), hh = H / (2 * cam.z);
+  cam.x = Math.max(hw, Math.min(W - hw, cam.x));
+  cam.y = Math.max(hh, Math.min(H - hh, cam.y));
+}
+function updateCam(dt) {
+  if (!C.camera) { cam.x = W / 2; cam.y = H / 2; cam.z = 1; return; }
+  shotT += dt;
+  const cur = shots[shotI], nxt = shots[(shotI + 1) % shots.length];
+  if (camPhase === 'hold') {
+    const k = shotT / cur.hold;
+    cam.x = cur.x; cam.y = cur.y + (cur.z > 1 ? Math.sin(k * Math.PI) * 6 : 0);
+    cam.z = zf(cur.z) * (1 + 0.05 * k * C.camZoom);            // slow creep while holding
+    if (shotT >= cur.hold) { camPhase = 'move'; shotT = 0; camFrom = { ...cam }; }
+  } else {
+    const dur = 2.2, e = easeIO(Math.min(1, shotT / dur));
+    const lz = Math.log(camFrom.z) + (Math.log(zf(nxt.z)) - Math.log(camFrom.z)) * e;
+    let z = Math.exp(lz);
+    if (camFrom.z > 1.2 && zf(nxt.z) > 1.2) z *= 1 - 0.4 * Math.sin(Math.PI * e); // pull out between two close-ups
+    cam.z = Math.max(1, z);
+    cam.x = camFrom.x + (nxt.x - camFrom.x) * e;
+    cam.y = camFrom.y + (nxt.y - camFrom.y) * e;
+    if (shotT >= dur) { shotI = (shotI + 1) % shots.length; camPhase = 'hold'; shotT = 0; }
+  }
+  clampCam();
+}
+function camT(ctx, d) { setXf(ctx, d, cam.z, d * (W / 2 - cam.x * cam.z), d * (H / 2 - cam.y * cam.z)); }
+function camTk(ctx, d, k) {
+  const z = 1 + (cam.z - 1) * k, x = W / 2 + (cam.x - W / 2) * k, y = H / 2 + (cam.y - H / 2) * k;
+  setXf(ctx, d, z, d * (W / 2 - x * z), d * (H / 2 - y * z));
+}
+const toScreen = (x, y) => ({ x: (x - cam.x) * cam.z + W / 2, y: (y - cam.y) * cam.z + H / 2 });
+
+/* ---------- setup ---------- */
+function mkd(w, h, d) {
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.ceil(w * d)); c.height = Math.max(1, Math.ceil(h * d));
+  c.x = c.getContext('2d'); c.x.setTransform(d, 0, 0, d, 0, 0); return c;
+}
+function resizeStage() {
+  const r = stage.getBoundingClientRect();
+  ROT = r.height > r.width * 1.05; SW = r.width; SH = r.height;
+  W = ROT ? r.height : r.width; H = ROT ? r.width : r.height;
+  stage.width = SW * DPR; stage.height = SH * DPR;
+  cx = W * (ROT ? -0.1 : 0.07); cy = H * 0.5;
+  R = Math.max(H * 0.78, W * 0.30);
+  RO = R + Math.max(90, Math.min(240, H * 0.3, W * 0.13)) * C.ringWidth;
+  RMAX = Math.hypot(W - cx, H / 2) + 60;
+  thV = Math.asin(Math.min(1, (H / 2 + 60) / R));
+  thS = Math.asin(Math.min(1, (H / 2 + 40) / RO));
+  buildWeb(); buildLanes(); buildCards(); buildOuter();
+  trailC = mkd(2 * R + 4, 2 * R + 4, Math.min(DPR, 1.5));
+  farC = document.createElement('canvas'); farC.width = Math.ceil(W * FS); farC.height = Math.ceil(H * FS); farC.x = farC.getContext('2d');
+  glowC = document.createElement('canvas');
+  glowC.width = Math.ceil(W / GS); glowC.height = Math.ceil(H / GS); glowC.x = glowC.getContext('2d');
+  runners = []; for (let i = 0; i < C.runnerCount; i++) runners.push(newRunner(true));
+  comets = []; pulses = [];
+  buildShots();
+}
+
+/* ---------- inner web ---------- */
+function buildWeb() {
+  const size = 2 * R + 4, d = Math.min(DPR, 1.5);
+  webBase = mkd(size, size, d);
+  webLayers = [0, 1, 2].map(() => mkd(size, size, d));
+  const all = [webBase, ...webLayers];
+  all.forEach(c => c.x.translate(R + 2, R + 2));
+  const b = webBase.x;
+  b.beginPath(); b.arc(0, 0, R, 0, TAU);
+  const g = b.createRadialGradient(0, 0, R * 0.2, 0, 0, R);
+  g.addColorStop(0, '#111215'); g.addColorStop(1, '#0c0d0f');
+  b.fillStyle = g; b.fill();
+  all.forEach(c => { c.x.save(); c.x.beginPath(); c.x.arc(0, 0, R, 0, TAU); c.x.clip(); });
+  curves = [];
+  const N = Math.min(2600, Math.round(1000 + (W * H) / 800));
+  for (let i = 0; i < N; i++) {
+    const a1 = rnd() * TAU, a2 = a1 + rr(0.6, Math.PI * 1.4);
+    const p0 = { x: Math.cos(a1) * R, y: Math.sin(a1) * R };
+    const p1 = { x: Math.cos(a2) * R, y: Math.sin(a2) * R };
+    const cr = Math.sqrt(rnd()) * R * 0.9, ca = rnd() * TAU;
+    const c = { x: Math.cos(ca) * cr, y: Math.sin(ca) * cr };
+    curves.push({ p0, c, p1 });
+    const layer = rnd() < 0.7 ? -1 : (rnd() * 3) | 0;
+    const x = layer < 0 ? b : webLayers[layer].x;
+    const al = Math.min(1, (layer < 0 ? 0.03 + Math.pow(rnd(), 3) * 0.28 : 0.08 + Math.pow(rnd(), 2) * 0.35) * C.webBright);
+    const k = rnd();
+    x.strokeStyle = k < 0.05 ? `rgba(240,166,198,${al})` : k < 0.1 ? `rgba(180,170,235,${al})` : `rgba(228,231,238,${al})`;
+    x.lineWidth = rr(0.4, 1.1);
+    x.beginPath(); x.moveTo(p0.x, p0.y); x.quadraticCurveTo(c.x, c.y, p1.x, p1.y); x.stroke();
+  }
+  // node markers
+  b.font = `6px ${FONT}`; b.textBaseline = 'middle';
+  for (let i = 0; i < 70; i++) {
+    const rr_ = Math.sqrt(rnd()) * R * 0.92, a = rnd() * TAU;
+    const px = Math.cos(a) * rr_, py = Math.sin(a) * rr_, s = rr(2, 4.5);
+    b.strokeStyle = `rgba(235,238,244,${rr(0.35, 0.8)})`; b.lineWidth = 0.8;
+    b.beginPath(); b.arc(px, py, s, 0, TAU); b.stroke();
+    if (rnd() < 0.4) { b.beginPath(); b.arc(px + s * 2.2, py, s * 0.8, 0, TAU); b.stroke(); }
+    if (rnd() < 0.35) { b.fillStyle = 'rgba(200,204,212,.5)'; b.fillText('n' + ((rnd() * 99) | 0), px + 7, py); }
+  }
+  // dotted chains of small rings (as in the original)
+  for (let k = 0; k < 3; k++) {
+    const rad = R * rr(0.45, 0.85), a0 = rr(0, TAU), cnt = 22 + (rnd() * 14 | 0);
+    b.strokeStyle = 'rgba(235,238,244,.55)'; b.lineWidth = 0.8;
+    for (let i = 0; i < cnt; i++) { const a = a0 + i * 0.022; b.beginPath(); b.arc(Math.cos(a) * rad, Math.sin(a) * rad, 2.2, 0, TAU); b.stroke(); }
+  }
+  all.forEach(c => c.x.restore());
+  if (HAS_FILTER && C.webBlur > 0) {
+    all.forEach((c, i) => {
+      const orig = document.createElement('canvas'); orig.width = c.width; orig.height = c.height; orig.getContext('2d').drawImage(c, 0, 0);
+      const x = c.x; x.save(); x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, c.width, c.height);
+      x.filter = `blur(${(i ? 0.5 : 1) * C.webBlur * d}px)`; x.drawImage(orig, 0, 0); x.filter = 'none';
+      x.globalAlpha = Math.max(0.15, 1 - C.webBlur * 0.3); x.drawImage(orig, 0, 0); x.restore();
+    });
+  }
+}
+const qpt = (cv, t) => {
+  const u = 1 - t;
+  return { x: u * u * cv.p0.x + 2 * u * t * cv.c.x + t * t * cv.p1.x, y: u * u * cv.p0.y + 2 * u * t * cv.c.y + t * t * cv.p1.y };
+};
+function newRunner(init) {
+  const cv = pick(curves), t = init ? rnd() : 0, p = qpt(cv, t);
+  // mixed speed personalities so lone lines never move in lockstep
+  const k = rnd(); let mode, sp;
+  if (rnd() > C.runnerVariety) { mode = 1; sp = rr(0.12, 0.38); }   // uniform (version A style)
+  else if (k < 0.3) { mode = 0; sp = rr(0.15, 0.28); }        // steady, ignores the beat
+  else if (k < 0.65) { mode = 1; sp = rr(0.1, 0.3); }    // surges on the beat
+  else if (k < 0.8) { mode = 0; sp = rr(0.04, 0.08); }   // slow drift
+  else if (k < 0.92) { mode = 0; sp = rr(0.5, 0.85); }   // fast streak
+  else { mode = 2; sp = rr(0.06, 0.12); }                 // accelerates along its path
+  return { cv, t, sp, mode, px: p.x, py: p.y, b: rnd() < 0.1 };
+}
+
+/* ---------- comets: short bright bundles sweeping with ease-in-out ---------- */
+function spawnComet() {
+  const lines = [], n = Math.max(2, Math.round((8 + (rnd() * 12 | 0)) * C.cometLines));
+  if (rnd() < 0.6) {
+    // concentric arc bundle hugging the ring
+    const rad = R * rr(0.55, 0.9), a0 = rr(-thV, thV) * 0.85, span = rr(0.35, 0.9) * (rnd() < 0.5 ? -1 : 1), gap = rr(2.6, 4.4) * C.cometWidth;
+    for (let k = 0; k < n; k++) lines.push({ arc: true, r: rad - k * gap + gauss() * 0.6, a0: a0 + gauss() * 0.01, span });
+  } else {
+    // converging bundle: inner point → ring edge
+    const ang = rr(-thV, thV) * 0.8, oa = ang + rr(-1.3, 1.3), orad = R * rr(0.25, 0.75);
+    const o = { x: Math.cos(oa) * orad, y: Math.sin(oa) * orad };
+    const spread = rr(0.08, 0.25) * C.cometWidth, bend = rr(0.2, 0.5) * (rnd() < 0.5 ? -1 : 1);
+    for (let i = 0; i < n; i++) {
+      const ta = ang + (i / n - 0.5) * spread;
+      const p1 = { x: Math.cos(ta) * (R - 2), y: Math.sin(ta) * (R - 2) };
+      const p0 = { x: o.x + gauss() * 10, y: o.y + gauss() * 10 };
+      const mx = (p0.x + p1.x) / 2, my = (p0.y + p1.y) / 2, dx = p1.x - p0.x, dy = p1.y - p0.y;
+      lines.push({ p0, c: { x: mx - dy * bend + gauss() * 8, y: my + dx * bend + gauss() * 8 }, p1 });
+    }
+  }
+  comets.push({ lines, life: 0, hit: false, rot0: ringRot, dur: rr(0.4, 0.85) / C.cometSpeed, win: rr(0.22, 0.4), glow: rnd() < 0.4, tint: rnd() < 0.15 });
+}
+const cpt = (l, t) => { if (!l.arc) return qpt(l, t); const r = l.r + (R - 2 - l.r) * t * t, a = l.a0 + l.span * t; return { x: Math.cos(a) * r, y: Math.sin(a) * r }; };
+function strokeComet(ctx, c, t0, t1, steps) {
+  ctx.beginPath();
+  for (const l of c.lines) for (let s = 0; s <= steps; s++) {
+    const p = cpt(l, t0 + (t1 - t0) * (s / steps));
+    s ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
+  }
+  ctx.stroke();
+}
+
+/* ---------- outer: stacked, constantly changing layers ----------
+   L0 haze bands (translucent wide wedges, additive, short lifecycles)
+   L1 far strands (thin, dim, slower rotation → parallax)
+   L2 main strands (dense, ring-attached, staircase tips + flowing dashes)
+   L3 root flares (bright white blocks at the ring edge, glow)          */
+let GR = {}, strandLayers = [], hazes = [], flares = [];
+const HAZE_COL = ['196,180,252', '242,242,252', '190,222,222'];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const normA = a => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI;
+function makeProfile(n) {
+  const prof = []; let v = rr(0.45, 1), run = 0;
+  for (let k = 0; k < n; k++) {
+    if (run-- <= 0) { v = clamp(v + gauss() * 0.4, 0.22, 1); run = 2 + (rnd() * 5 | 0); }
+    prof.push(clamp(v + gauss() * 0.07, 0.18, 1));
+  }
+  return prof;
+}
+function makeStrandLayer(stepDeg, rotK, lumK, lw, lenK, solidK, cover, nMin, nMax, brightP, dyn = 'soft') {
+  const step = stepDeg * Math.PI / 180, nb = Math.floor(TAU / step), ws = [];
+  const count = Math.round(nb * cover / ((nMin + nMax) / 2));
+  for (let j = 0; j < count; j++) {
+    const n = nMin + (rnd() * (nMax - nMin) | 0), bright = rnd() < brightP;
+    ws.push({
+      i0: (rnd() * nb) | 0, n, base: rr(0.35, 1), len: rr(0.1, 0.5), kick: 0,
+      ph: rnd() * TAU, ph2: rnd() * TAU, f1: rr(0.22, 0.6), f2: rr(0.8, 1.7),
+      lum: bright ? rr(0.75, 1) : rr(0.16, 0.55), tint: rnd() < 0.5 ? 1 : 0,
+      lwK: rnd() < 0.2 ? rr(1.35, 2.1) : rr(0.6, 1.15), lenS: rr(0.6, 1.25),
+      prof: makeProfile(n), pf: Array.from({ length: n }, () => rr(1, 4)), pp: Array.from({ length: n }, () => rnd() * TAU),
+      ds: Array.from({ length: n }, () => rnd()), dsp: rr(0.7, 1.8), flow: 0
+    });
+  }
+  return { step, rotK, lumK, lw, lenK, solidK, wedges: ws, off: rnd() * TAU, dyn };
+}
+function buildOuter() {
+  strandLayers = [
+    //               step  rotK  lumK  lw    lenK  solidK cover nMin nMax brightP
+    makeStrandLayer(0.22, 0.45, 0.30, 0.55, 1.15, 0.9,  1.1,  20,  90, 0.2),   // far: faint, thin, slow
+    makeStrandLayer(0.16, 0.75, 0.58, 0.8,  1.05, 0.7,  0.9,  14,  70, 0.28),  // mid
+    makeStrandLayer(0.12, 1.0,  1.0,  1.0,  1.0,  0.5,  0.75, 12,  60, 0.32),  // main (dashes + tips)
+    makeStrandLayer(0.45, 1.0,  0.5,  1.8,  0.8,  0.6,  0.35, 4,   16, 0.3),   // near: few thick strokes
+    makeStrandLayer(0.12, 1.0,  0.85, 1.0,  1.0,  0.5,  0.55, 14,  70, 0.32, 'bounce'),  // v4 wave / rebound layer
+  ];
+  wedges = strandLayers[2].wedges.concat(strandLayers[4].wedges);
+  hazes = []; flares = [];
+  GR = {};
+  const mkG = (stops, r1) => { const g = S.createRadialGradient(cx, cy, RO, cx, cy, r1); stops.forEach(s => g.addColorStop(s[0], s[1])); return g; };
+  GR.s0 = mkG([[0, 'rgba(248,248,255,1)'], [0.35, 'rgba(228,226,242,.8)'], [1, 'rgba(190,190,214,.3)']], RMAX * 0.95);
+  GR.s2 = mkG([[0, 'rgba(225,245,242,1)'], [0.3, 'rgba(176,214,210,.8)'], [1, 'rgba(140,180,186,.3)']], RMAX * 0.95);
+  GR.s1 = mkG([[0, 'rgba(240,236,255,1)'], [0.3, 'rgba(196,182,244,.82)'], [1, 'rgba(160,140,228,.3)']], RMAX * 0.95);
+  // haze tints: lavender / pale white / grey-teal
+  GR.h0 = mkG([[0, 'rgba(205,190,255,.95)'], [0.25, 'rgba(180,165,240,.7)'], [0.7, 'rgba(150,135,215,.25)'], [1, 'rgba(120,110,190,0)']], RMAX);
+  GR.h1 = mkG([[0, 'rgba(250,250,255,1)'], [0.2, 'rgba(225,225,240,.65)'], [0.65, 'rgba(200,200,225,.2)'], [1, 'rgba(180,180,210,0)']], RMAX);
+  GR.h2 = mkG([[0, 'rgba(200,230,228,.9)'], [0.25, 'rgba(170,205,210,.6)'], [0.7, 'rgba(140,170,185,.2)'], [1, 'rgba(120,150,170,0)']], RMAX);
+  for (let i = 0; i < 14; i++) spawnHaze(true);
+  initFlyers();
+}
+function spawnHaze(init) {
+  const k = rnd();
+  hazes.push({
+    a: rr(-thS, thS) - ringRot, w: rnd() < 0.7 ? rr(0.015, 0.07) : rr(0.08, 0.18),
+    len: rr(0.35, 1), cur: init ? rr(0.2, 0.8) : 0, age: init ? rr(0, 0.5) : 0,
+    life: rr(0.35, 1.6), alpha: rr(0.12, 0.42), tint: k < 0.55 ? 0 : k < 0.85 ? 1 : 2, drift: rr(-0.04, 0.04)
+  });
+}
+function spawnFlare(a) {
+  flares.push({ a: a == null ? rr(-thS, thS) * 0.95 - ringRot : a, w: rr(0.006, 0.04), len: rr(18, 110), age: 0, life: rr(0.2, 0.55), alpha: rr(0.6, 1) });
+}
+function buildLanes() {
+  laneC = mkd(W, H, DPR);
+  const x = laneC.x;
+  for (let i = 0; i < 700; i++) {
+    const a = rr(-thS, thS);
+    x.strokeStyle = `rgba(210,205,235,${rr(0.01, 0.035)})`; x.lineWidth = rr(0.5, 1);
+    const r0 = RO + 4, r1 = rr(RO + 60, RMAX * 0.8);
+    x.beginPath(); x.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0); x.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); x.stroke();
+  }
+}
+function updateOuter(dt) {
+  for (let i = pulses.length - 1; i >= 0; i--) { const p = pulses[i]; p.c += p.v * dt; p.life -= dt; if (p.life <= 0) pulses.splice(i, 1); }
+  for (const Lr of strandLayers) {
+    const rot = ringRot * Lr.rotK + Lr.off;
+    for (const w of Lr.wedges) {
+      const am = normA((w.i0 + w.n / 2) * Lr.step + rot);
+      w.vis = Math.abs(am) < thS + 0.2;
+      w.flow += dt * w.dsp * (0.45 + 2.2 * env);
+      if (!w.vis) { w.len *= 0.98; continue; }
+      let p = 0;
+      for (const pl of pulses) { const f = Math.min(1, pl.life / 0.5) * Math.min(1, (pl.L - pl.life) / 0.15 + 0.3); p += pl.amp * f * Math.exp(-(((am - pl.c) / pl.w) ** 2)); }
+      if (Lr.dyn === 'bounce') {
+        const idle = w.base * (0.36 + 0.14 * Math.sin(T * 0.9 + w.ph));
+        const tgt = Math.min(1, idle + p * 0.75 + w.kick * 0.6);
+        w.kick *= Math.exp(-dt * 2.4);
+        w.len += (tgt - w.len) * Math.min(1, (tgt > w.len ? 15 : 2.2) * dt);   // snap out on the wave, ease back
+      } else {
+        const n1 = 0.5 + 0.5 * Math.sin(T * w.f1 + w.ph), n2 = 0.5 + 0.5 * Math.sin(T * w.f2 + w.ph2);
+        const idle = w.base * (0.4 + 0.34 * n1 + 0.14 * n2);
+        const tgt = Math.min(1.05, (idle + p * 0.7 + w.kick * 0.55) * w.lenS);
+        w.kick *= Math.exp(-dt * 1.8);
+        w.len += (tgt - w.len) * Math.min(1, (tgt > w.len ? 5 : 1.3) * dt);
+      }
+    }
+  }
+  // haze lifecycle
+  for (let i = hazes.length - 1; i >= 0; i--) {
+    const h = hazes[i]; h.age += dt;
+    h.cur += (h.len - h.cur) * Math.min(1, 9 * dt);
+    if (h.age > h.life + 0.6) hazes.splice(i, 1);
+  }
+  if (hazes.length < C.hazeCount && rnd() < 0.25) spawnHaze(false);
+  for (let i = flares.length - 1; i >= 0; i--) { flares[i].age += dt; if (flares[i].age > flares[i].life) flares.splice(i, 1); }
+  if (rnd() < 0.06 * C.flareRate) spawnFlare();
+  updateFlyers(dt);
+}
+function onBeatOuter() {
+  onBeatFlyers();
+  for (let i = 0; i < 2 + (rnd() * 5 | 0); i++) { const w = pick(wedges); w.kick = rr(0.4, 1); if (rnd() < 0.5) w.prof = makeProfile(w.n); }
+  for (let i = 0; i < 2; i++) { const w = pick(wedges); w.lum = rnd() < 0.4 ? rr(0.8, 1) : rr(0.25, 0.6); }
+  const nh = beatN % 4 === 0 ? 5 + (rnd() * 4 | 0) : 1 + (rnd() * 3 | 0);
+  for (let i = 0; i < Math.round(nh * C.hazeCount / 8); i++) spawnHaze(false);
+  const nf = Math.round((1 + (rnd() * 4 | 0)) * C.flareRate);
+  for (let i = 0; i < nf; i++) spawnFlare(hazes.length && rnd() < 0.6 ? pick(hazes).a : null);
+}
+function hazeEnv(h) {
+  const a = Math.min(1, h.age / 0.12);                       // fast in
+  const o = h.age > h.life ? Math.max(0, 1 - (h.age - h.life) / 0.6) : 1; // slower out
+  return a * o * (0.85 + 0.15 * Math.sin(h.age * 30));      // slight flicker
+}
+const EDGE_A = [0.28, 0.62, 1];
+function drawStrands(Lr, collect) {
+  const span = RMAX - RO - 20, r0 = RO + 3, rot = ringRot * Lr.rotK + Lr.off;
+  S.lineCap = 'butt';
+  for (const w of Lr.wedges) {
+    if (!w.vis) continue;
+    const L = w.len * span * Lr.lenK * C.beamLen;
+    if (L < 3) continue;
+    const a0 = normA(w.i0 * Lr.step + rot), a1 = a0 + w.n * Lr.step;
+    if (a1 < -thS - 0.03 || a0 > thS + 0.03) continue;
+    const alpha = Math.min(1, w.lum * Lr.lumK * (0.3 + 0.7 * Math.min(1, w.len * 1.8)) * C.beamBright * (Lr.dyn === 'bounce' ? C.beamBounce : 1));
+    if (alpha < 0.005) continue;
+    const lwW = Lr.lw * w.lwK * C.beamWidth;
+    const paths = [new Path2D(), new Path2D(), new Path2D()];
+    for (let k = 0; k < w.n; k++) {
+      const a = a0 + (k + 0.5) * Lr.step, ca = Math.cos(a), sa = Math.sin(a);
+      const edge = Math.sin(Math.PI * (k + 0.5) / w.n), b = edge < 0.38 ? 0 : edge < 0.72 ? 1 : 2;
+      const pr = w.prof[k];
+      const l = L * pr * (0.5 + 0.5 * Math.sqrt(edge)) * (0.92 + 0.08 * Math.sin(T * w.pf[k] + w.pp[k]));
+      const solid = l * (Lr.solidK + 0.3 * pr * (1 - Lr.solidK));
+      paths[b].moveTo(cx + ca * r0, cy + sa * r0); paths[b].lineTo(cx + ca * (r0 + solid), cy + sa * (r0 + solid));
+      if (!collect) continue;
+      const tail = l - solid, da = alpha * EDGE_A[b];
+      if (tail > 6) for (let d = 0; d < 2; d++) {
+        const ph = (w.flow + w.ds[k] + d * 0.5) % 1;
+        const s0 = solid + tail * ph, s1 = Math.min(l, s0 + 3 + tail * 0.22 * (1 - ph * 0.5));
+        if (s1 > s0) collect.dash.push(ca, sa, s0, s1, da);
+      }
+      if ((k + (T * 12 | 0)) % 4 === 0) collect.tip.push(ca, sa, l, da);
+    }
+    S.strokeStyle = GR['s' + w.tint]; S.lineWidth = lwW;
+    for (let b = 0; b < 3; b++) { S.globalAlpha = alpha * EDGE_A[b]; S.stroke(paths[b]); }
+    if (w.lum > 0.85 && C.beamGlow > 0) { S.globalAlpha = Math.min(1, alpha * 0.06 * C.beamGlow); S.lineWidth = lwW * 2.5; S.stroke(paths[2]); }
+  }
+}
+const hash = x => { const s = Math.sin(x * 12.9898) * 43758.5453; return s - Math.floor(s); };
+function radialLines(a0, a1, st, r0, L, seed, lo) {
+  S.beginPath();
+  let k = 0;
+  for (let a = a0; a < a1; a += st, k++) {
+    const l = L * (lo + (1 - lo) * hash(k + seed)), ca = Math.cos(a), sa = Math.sin(a);
+    S.moveTo(cx + ca * r0, cy + sa * r0); S.lineTo(cx + ca * (r0 + l), cy + sa * (r0 + l));
+  }
+}
+/* ---- fly-out streaks: shoot outward and never retract, interleaved with the beams ----
+   singles: sparse, dimmer, respawn forever
+   bursts : packets of parallel streaks launched together on the beat, brighter, die at the edge */
+let flyers = [], flyBands = [];
+function newFlyBand() { return { a: rr(-thS, thS), w: rr(0.01, 0.05), life: rr(2, 6) }; }
+function newFlyer(init) {
+  let a;
+  if (rnd() < 0.5) { const b = pick(flyBands); a = b.a + gauss() * b.w; } else a = rr(-thS, thS);
+  return {
+    a: a - ringRot, len: 20 + Math.pow(rnd(), 2) * 320, r: init ? rr(RO, RMAX) : RO + rr(0, 25),
+    sp: rr(260, 900), lw: rnd() < 0.08 ? rr(1.2, 1.7) : rr(0.5, 1), lv: rnd() < 0.12 ? 1 : 0, tint: rnd() < 0.22 ? 1 : 0, burst: false
+  };
+}
+function spawnFlyBurst() {
+  const a = rr(-thS, thS) * 0.95, n = Math.max(1, Math.round((14 + (rnd() * 30 | 0)) * C.burstSize)), spread = rr(0.01, 0.045);
+  const sp = rr(450, 1150), len = rr(70, 320), r0 = RO + rr(0, 8), tint = rnd() < 0.3 ? 1 : 0, lv = rnd() < 0.45 ? 2 : 1;
+  for (let i = 0; i < n; i++) {
+    flyers.push({
+      a: a + (i / n - 0.5) * spread + gauss() * 0.0015 - ringRot, len: len * rr(0.7, 1.15), r: r0 - rr(0, len * 0.35),
+      sp: sp * rr(0.92, 1.08), lw: rnd() < 0.2 ? 1.3 : rr(0.6, 1), lv, tint, burst: true
+    });
+  }
+}
+function initFlyers() {
+  flyBands = Array.from({ length: 7 }, newFlyBand);
+  flyers = Array.from({ length: Math.round(Math.min(750, 320 + W * 0.25) * C.flyerCount) }, () => newFlyer(true));
+}
+function updateFlyers(dt) {
+  for (const b of flyBands) { b.life -= dt; if (b.life <= 0) Object.assign(b, newFlyBand()); }
+  const k = (0.7 + 0.9 * env) * C.flyerSpeed;
+  for (let i = flyers.length - 1; i >= 0; i--) {
+    const f = flyers[i];
+    f.r += f.sp * dt * k;
+    if (f.r - f.len > RMAX) { if (f.burst) flyers.splice(i, 1); else flyers[i] = newFlyer(false); }
+  }
+}
+function onBeatFlyers() {
+  const n = Math.round((beatN % 4 === 0 ? 3 + (rnd() * 2 | 0) : 1 + (rnd() * 2 | 0)) * C.burstRate);
+  for (let i = 0; i < n; i++) setTimeout(spawnFlyBurst, i * rr(20, 120));
+}
+const FLY_A = [0.16, 0.36, 0.7];
+function drawFlyers(bursts) {
+  const buckets = {};
+  for (const f of flyers) {
+    if (f.burst !== bursts) continue;
+    const a = normA(f.a + ringRot);
+    if (a < -thS - 0.05 || a > thS + 0.05) continue;
+    const key = f.tint * 10 + f.lv + (f.lw > 1.15 ? 100 : 0) + (f.burst ? 1000 : 0);
+    (buckets[key] || (buckets[key] = [])).push(f, a);
+  }
+  for (const key in buckets) {
+    const arr = buckets[key], f0 = arr[0];
+    S.strokeStyle = f0.tint ? GR.s1 : GR.s0; S.globalAlpha = Math.min(1, FLY_A[f0.lv] * (f0.burst ? C.burstBright : C.flyerBright)); S.lineWidth = ((key % 1000) >= 100 ? 1.5 : 0.8) * C.flyerWidth;
+    S.beginPath();
+    for (let i = 0; i < arr.length; i += 2) {
+      const f = arr[i], a = arr[i + 1], r0 = Math.max(RO + 3, f.r - f.len), r1 = f.r;
+      if (r1 <= r0) continue;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      S.moveTo(cx + ca * r0, cy + sa * r0); S.lineTo(cx + ca * r1, cy + sa * r1);
+    }
+    S.stroke();
+  }
+  S.globalAlpha = 1;
+}
+function drawOuterFar() {
+  const span = RMAX - RO - 20, r0 = RO + 3;
+  // haze bundles 鈥?very dense, faint lines that merge into soft bands
+  for (const h of hazes) {
+    const e = hazeEnv(h); if (e <= 0.01) continue;
+    if (h.seed === undefined) h.seed = rnd() * 1000;
+    const L = h.cur * span;
+    radialLines(h.a + ringRot - h.w / 2, h.a + ringRot + h.w / 2, OSTEP * 0.55, r0, L, h.seed, 0.45);
+    S.strokeStyle = GR['s' + (h.tint === 1 ? 0 : h.tint === 2 ? 2 : 1)];
+    S.globalAlpha = Math.min(1, h.alpha * e * 0.05 * C.hazeBright); S.lineWidth = 2.2; S.stroke();
+    S.globalAlpha = Math.min(1, h.alpha * e * 0.6 * C.hazeBright); S.lineWidth = 0.55; S.stroke();
+  }
+  drawStrands(strandLayers[0], null);   // far strands
+  drawStrands(strandLayers[1], null);   // mid strands
+  drawFlyers(false);                    // single fly-outs live in the background
+  S.globalAlpha = 1;
+}
+function drawOuterNear() {
+  const r0 = RO + 3;
+  const col = { dash: [], tip: [] };
+  drawStrands(strandLayers[2], col);
+  drawStrands(strandLayers[4], col);   // wave / rebound layer
+  drawStrands(strandLayers[3], null);   // near thick strokes
+  S.strokeStyle = '#fff'; S.lineWidth = 1.05;
+  for (const lv of [0.35, 0.65, 1]) {
+    S.globalAlpha = Math.min(1, lv * C.dashBright); S.beginPath();
+    const dp = col.dash;
+    for (let i = 0; i < dp.length; i += 5) {
+      const a = dp[i + 4]; if (a > lv || a <= lv - 0.35) continue;
+      S.moveTo(cx + dp[i] * (r0 + dp[i + 2]), cy + dp[i + 1] * (r0 + dp[i + 2])); S.lineTo(cx + dp[i] * (r0 + dp[i + 3]), cy + dp[i + 1] * (r0 + dp[i + 3]));
+    }
+    S.stroke();
+  }
+  S.fillStyle = '#fff';
+  for (let i = 0; i < col.tip.length; i += 4) {
+    S.globalAlpha = Math.min(1, col.tip[i + 3] * 1.2);
+    const r = r0 + col.tip[i + 2];
+    S.fillRect(cx + col.tip[i] * r - 0.8, cy + col.tip[i + 1] * r - 0.8, 1.6, 1.6);
+  }
+  drawFlyers(true);                     // burst packets are in the foreground
+  S.strokeStyle = GR.s0;
+  for (const f of flares) {
+    if (f.seed === undefined) f.seed = rnd() * 1000;
+    const t = f.age / f.life, e = (t < 0.15 ? t / 0.15 : Math.pow(1 - (t - 0.15) / 0.85, 2)) * f.alpha;
+    const L = f.len * (0.6 + 0.4 * easeO(Math.min(1, t * 3)));
+    radialLines(f.a + ringRot - f.w / 2, f.a + ringRot + f.w / 2, OSTEP * 0.45, r0, L, f.seed, 0.4);
+    S.globalAlpha = Math.min(1, e * 0.06 * C.flareBright); S.lineWidth = 2.6; S.stroke();
+    S.globalAlpha = Math.min(1, e * C.flareBright); S.lineWidth = 0.8; S.stroke();
+  }
+  S.globalAlpha = 1;
+}
+
+/* ---------- foreground bokeh: out-of-focus specks closest to the viewer ---------- */
+let bokehs = [], bokehSpr = null;
+function mkBokehSprite() {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const x = c.getContext('2d'), g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, 'rgba(255,255,255,.9)'); g.addColorStop(0.5, 'rgba(235,232,255,.5)'); g.addColorStop(0.82, 'rgba(220,215,255,.22)');
+  g.addColorStop(0.93, 'rgba(225,220,255,.32)'); g.addColorStop(1, 'rgba(220,215,255,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 128, 128); return c;
+}
+function newBokeh() {
+  const big = rnd() < 0.3;
+  return { x: rr(-0.1, 1.1) * W, y: rr(-0.1, 1.1) * H, r: big ? rr(24, 64) : rr(5, 22), a: big ? rr(0.025, 0.07) : rr(0.05, 0.16),
+    vx: rr(-10, 10), vy: rr(-6, 6), st: rnd() < 0.3 ? rr(2, 5) : 1, ph: rnd() * TAU };
+}
+function drawBokeh(dt) {
+  const n = Math.round(C.bokeh);
+  while (bokehs.length < n) bokehs.push(newBokeh());
+  if (bokehs.length > n) bokehs.length = n;
+  if (!n) return;
+  if (!bokehSpr) bokehSpr = mkBokehSprite();
+  const k = 1 + 0.6 * C.parallax, z = 1 + (cam.z - 1) * k, ox = (cam.x - W / 2) * k, oy = (cam.y - H / 2) * k;
+  setXf(S, DPR, 1, 0, 0); S.globalCompositeOperation = 'lighter';
+  for (const b of bokehs) {
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    if (b.x < -0.15 * W) b.x += 1.3 * W; if (b.x > 1.15 * W) b.x -= 1.3 * W;
+    if (b.y < -0.15 * H) b.y += 1.3 * H; if (b.y > 1.15 * H) b.y -= 1.3 * H;
+    const sx = (b.x - W / 2 - ox) * z + W / 2, sy = (b.y - H / 2 - oy) * z + H / 2, r = b.r * z;
+    S.globalAlpha = Math.min(1, b.a * C.bokehBright * (0.75 + 0.25 * Math.sin(T * 0.8 + b.ph)) * (1 + env * 0.3));
+    S.drawImage(bokehSpr, sx - r * b.st, sy - r, 2 * r * b.st, 2 * r);
+  }
+  S.globalAlpha = 1; S.globalCompositeOperation = 'source-over';
+}
+/* ---------- ring: pre-rendered dot-matrix data blocks on a black band ---------- */
+const RING_SC = 2.4;
+let slots = [];
+const easeOX = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t);
+const rot = { from: 0, to: 0, t: 1, dur: 1, hold: 0, ease: easeIO };
+function ringMove() {
+  const r = rnd(); let d, dur, ease;
+  if (r < 0.22) { d = rr(1.1, 2.1); dur = rr(0.7, 1.05); ease = easeIO; }        // fast spin
+  else if (r < 0.64) { d = rr(0.14, 0.48); dur = rr(0.18, 0.38); ease = easeOX; } // snap & stop
+  else { d = rr(0.05, 0.18); dur = rr(0.3, 0.6); ease = easeIO; }               // small nudge
+  if (rnd() < 0.08) d = -d * 0.5;  d *= C.ringSpeed;
+  Object.assign(rot, { from: ringRot, to: ringRot + d, t: 0, dur, ease, hold: rr(0.04, 0.4) * C.ringPause });
+}
+function flashSlotAt(ang) {
+  let best = null, bd = 9;
+  for (const s of slots) { const d = Math.abs(normA(s.a + ringRot - ang)); if (d < bd) { bd = d; best = s; } }
+  if (best && bd < 0.08) best.flash = Math.max(best.flash, 0.8);
+}
+function updateRing(dt) {
+  if (rot.t < rot.dur) { rot.t += dt; ringRot = rot.from + (rot.to - rot.from) * rot.ease(Math.min(1, rot.t / rot.dur)); }
+  else { rot.hold -= dt; ringRot += 0.02 * dt; }
+}
+function buildCards() {
+  slots = [];
+  const band = RO - R, mid = R + band * 0.42;
+  let a = 0;
+  while (a < TAU - 0.03) {
+    const hpx = rr(16, 62), da = hpx / mid, gap = rr(3, 9) / mid;
+    slots.push({ a: a + da / 2, da, hpx, c: null, flash: 0 });
+    a += da + gap;
+  }
+  Object.assign(rot, { from: 0, to: 0, t: 1, dur: 1, hold: 0 });
+}
+const TINTS = [[232, 234, 240], [232, 234, 240], [232, 234, 240], [232, 234, 240], [232, 234, 240], [232, 234, 240], [196, 184, 246], [196, 184, 246], [168, 222, 214], [206, 212, 150]];
+const HEAD = ['HERMES/01', 'GATEWAY', 'ROLE 02', 'JOB QUEUE', 'HEALTH', 'DISPATCH', 'EVENT BUS', 'AGENT 03', 'BUFFER A',
+  'TOKEN FLOW', 'STEP 1284', 'QUEUE 64', 'DELIVER', 'APPROVE', 'LOG TAIL', 'CRON', 'RETRY', 'TRACE', 'LATENCY', 'UPTIME', 'VALIDATE', 'DELIVERY'];
+const KEYS = ['msgs', 'jobs', 'ok', 'fail', 'p95', 'tokens', 'quota', 'roles', 'units', 'events', 'logs', 'uptime', 'retry', 'queue'];
+const CODE_T = ['send()', 'job.run()', 'poll()', 'ok', 'PASS', 'tg.send', 'retry', 'emit', 'push', 'read', 'log', 'ack', 'seq', '->', '==', 'wait', 'drain', 'flush', 'sync', 'tick', 'route', 'deliver', 'check', 'done'];
+const rgba = (t, a) => `rgba(${t[0]},${t[1]},${t[2]},${a})`;
+const fmtNum = () => { const k = rnd(); return k < 0.3 ? rr(0, 1).toFixed(3) : k < 0.55 ? (rr(1, 9).toFixed(1) + 'e-' + (2 + (rnd() * 5 | 0))) : k < 0.8 ? String((rnd() * 9999) | 0) : rr(0, 100).toFixed(1); };
+function glyphStrips(x, x1, y0, y1, pitch, opt, ctx) {
+  const tint = opt.tint;
+  for (let lx = x; lx < x1 - 1; lx += pitch) {
+    if (opt.colGap && rnd() < 0.18) { lx += pitch * 0.8; continue; }
+    const len = (y1 - y0) * (opt.ragged ? rr(0.35, 1) : rr(0.85, 1));
+    const start = opt.ragged && rnd() < 0.3 ? y0 + rr(0, (y1 - y0) * 0.3) : y0;
+    let y = start;
+    const lb = rr(0.55, 1);
+    while (y < Math.min(y1, start + len)) {
+      const cl = opt.solid ? rr(2, 6) : rr(0.9, 2.2);
+      if (rnd() < 0.9) { ctx.fillStyle = rgba(tint, lb * rr(0.6, 1)); ctx.fillRect(lx, y, opt.th, Math.min(cl, y1 - y)); }
+      y += cl + (rnd() < 0.12 ? rr(1.5, 3) : rr(0.5, 0.9));
+    }
+  }
+}
+// ---- block renderers: (ctx, x0, x1, y0, y1, tint) — x is radial, y is tangential ----
+function header(c, x0, x1, y, t) {
+  c.font = `700 4.3px ${FONT}`; c.fillStyle = rgba(t, 0.95); c.fillText(pick(HEAD), x0, y);
+  c.fillStyle = rgba(t, 0.55); c.fillText(String((rnd() * 99) | 0).padStart(2, '0'), x1 - 6, y);
+  c.fillStyle = rgba(t, 0.3); c.fillRect(x0, y + 5.6, x1 - x0, 0.45);
+  return y + 7.5;
+}
+const BLOCKS = {
+  code(c, x0, x1, y0, y1, t) {
+    let y = header(c, x0, x1, y0, t);
+    c.font = `500 3.5px ${FONT}`;
+    let n = 1 + (rnd() * 40 | 0);
+    while (y < y1 - 3.5) {
+      c.fillStyle = rgba(t, 0.3); c.fillText(String(n++).padStart(3, '0'), x0, y);
+      let xx = x0 + 9;
+      const words = 1 + (rnd() * 4 | 0);
+      for (let i = 0; i < words && xx < x1 - 4; i++) {
+        const w = pick(CODE_T); c.fillStyle = rgba(t, rnd() < 0.25 ? 1 : rr(0.5, 0.8)); c.fillText(w, xx, y); xx += w.length * 2.15 + 2;
+      }
+      y += 4.6;
+    }
+  },
+  kv(c, x0, x1, y0, y1, t) {
+    let y = y1 - y0 > 18 ? header(c, x0, x1, y0, t) : y0 + 1;
+    c.font = `500 3.6px ${FONT}`;
+    while (y < y1 - 4) {
+      c.fillStyle = rgba(t, 0.5); c.fillText(pick(KEYS), x0, y);
+      const v = fmtNum(); c.fillStyle = rgba(t, 0.95); c.textAlign = 'right'; c.fillText(v, x1, y); c.textAlign = 'left';
+      const bx = x0 + 14, bw = Math.max(0, x1 - x0 - 14 - v.length * 2.2 - 4);
+      c.fillStyle = rgba(t, 0.15); c.fillRect(bx, y + 1.2, bw, 1.2);
+      c.fillStyle = rgba(t, 0.7); c.fillRect(bx, y + 1.2, bw * rnd(), 1.2);
+      y += 5.2;
+    }
+  },
+  spark(c, x0, x1, y0, y1, t) {
+    const y = header(c, x0, x1, y0, t), top = y + 1, bot = y1 - 2, n = 40;
+    c.fillStyle = rgba(t, 0.18); c.fillRect(x0, bot, x1 - x0, 0.4); c.fillRect(x0, (top + bot) / 2, x1 - x0, 0.25);
+    c.strokeStyle = rgba(t, 0.95); c.lineWidth = 0.55; c.beginPath();
+    let v = rnd(), lx = 0, ly = 0;
+    for (let i = 0; i <= n; i++) {
+      v = clamp(v + gauss() * 0.22, 0, 1);
+      lx = x0 + (x1 - x0) * i / n; ly = bot - v * (bot - top);
+      i ? c.lineTo(lx, ly) : c.moveTo(lx, ly);
+    }
+    c.stroke(); c.fillStyle = '#fff'; c.fillRect(lx - 0.9, ly - 0.9, 1.8, 1.8);
+  },
+  bars(c, x0, x1, y0, y1, t) {
+    const y = header(c, x0, x1, y0, t), n = 6 + (rnd() * 10 | 0), bh = (y1 - y - 1) / n;
+    c.font = `500 3px ${FONT}`;
+    for (let i = 0; i < n; i++) {
+      const v = rr(0.1, 1), yy = y + i * bh;
+      c.fillStyle = rgba(t, 0.35); c.fillText(String(i).padStart(2, '0'), x0, yy);
+      c.fillStyle = rgba(t, v > 0.85 ? 1 : 0.65); c.fillRect(x0 + 7, yy + 0.4, (x1 - x0 - 7) * v, Math.max(0.8, bh - 1.2));
+    }
+  },
+  prog(c, x0, x1, y0, y1, t) {
+    let y = y1 - y0 > 18 ? header(c, x0, x1, y0, t) : y0 + 1;
+    c.font = `500 3.4px ${FONT}`;
+    while (y < y1 - 5) {
+      const p = rnd();
+      c.fillStyle = rgba(t, 0.55); c.fillText(pick(['read', 'build', 'review', 'qa', 'sync', 'diff']), x0, y);
+      c.fillStyle = rgba(t, 0.9); c.textAlign = 'right'; c.fillText((p * 100 | 0) + '%', x1, y); c.textAlign = 'left';
+      const bx = x0 + 15, bw = x1 - x0 - 26, segs = 12;
+      for (let i = 0; i < segs; i++) { c.fillStyle = rgba(t, i / segs < p ? 0.85 : 0.14); c.fillRect(bx + i * bw / segs, y + 0.6, bw / segs - 0.6, 2); }
+      y += 5.4;
+    }
+  },
+  grid(c, x0, x1, y0, y1, t) {
+    const y = y1 - y0 > 20 ? header(c, x0, x1, y0, t) : y0 + 1, p = rr(2.4, 3.2);
+    for (let yy = y; yy < y1 - p + 0.5; yy += p) for (let xx = x0; xx < x1 - p + 0.5; xx += p) {
+      const v = rnd();
+      c.fillStyle = v > 0.93 ? 'rgba(240,166,198,.95)' : rgba(t, 0.08 + v * v * 0.8);
+      c.fillRect(xx, yy, p - 0.6, p - 0.6);
+    }
+  },
+  gauge(c, x0, x1, y0, y1, t) {
+    const r = Math.min((y1 - y0) / 2 - 1.5, 9), gx = x0 + r + 1, gy = (y0 + y1) / 2, v = rnd();
+    c.lineWidth = 1.2; c.strokeStyle = rgba(t, 0.15); c.beginPath(); c.arc(gx, gy, r, 0, TAU); c.stroke();
+    c.strokeStyle = rgba(t, 0.95); c.beginPath(); c.arc(gx, gy, r, -Math.PI / 2, -Math.PI / 2 + TAU * v); c.stroke();
+    c.font = `700 ${Math.max(3.2, r * 0.55)}px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillStyle = rgba(t, 1); c.fillText((v * 100 | 0) + '', gx, gy); c.textAlign = 'left'; c.textBaseline = 'top';
+    if (x1 - (gx + r) > 20) BLOCKS.kv(c, gx + r + 4, x1, y0, y1, t);
+  },
+  wave(c, x0, x1, y0, y1, t) {
+    const y = header(c, x0, x1, y0, t), mid = (y + y1) / 2, amp = (y1 - y) * 0.38, f1 = rr(0.15, 0.4), f2 = rr(0.5, 1.2), ph = rnd() * 6;
+    [[0.95, 1], [0.4, -0.6]].forEach(([a, k]) => {
+      c.strokeStyle = rgba(t, a); c.lineWidth = 0.5; c.beginPath();
+      for (let xx = x0; xx <= x1; xx += 0.8) { const yy = mid + amp * k * (Math.sin(xx * f1 + ph) * 0.7 + Math.sin(xx * f2) * 0.3); xx === x0 ? c.moveTo(xx, yy) : c.lineTo(xx, yy); }
+      c.stroke();
+    });
+  },
+  para(c, x0, x1, y0, y1, t) { glyphStrips(x0, x1, y0, y1, rr(2.6, 3.4), { tint: t, ragged: true, th: 1.3 }, c); },
+  cols(c, x0, x1, y0, y1, t) { glyphStrips(x0, x1, y0, y1, rr(3.6, 4.6), { tint: t, colGap: true, th: 1.5 }, c); },
+  barcode(c, x0, x1, y0, y1, t) { glyphStrips(x0, x1, y0, y1, rr(3.2, 4.2), { tint: t, solid: true, th: 1.8 }, c); },
+  matrix(c, x0, x1, y0, y1, t) {
+    const p = rr(2.1, 2.6), dens = rr(0.35, 0.65);
+    for (let yy = y0; yy < y1 - 1; yy += p) for (let xx = x0; xx < x1; xx += p)
+      if (rnd() < dens) { c.fillStyle = rgba(t, rr(0.5, 1)); c.fillRect(xx, yy, 1.4, 1.4); }
+  },
+};
+const BLOCK_W = [['code', 16], ['kv', 11], ['spark', 9], ['bars', 8], ['prog', 7], ['grid', 7], ['gauge', 3], ['wave', 4],
+  ['para', 12], ['cols', 7], ['barcode', 6], ['matrix', 8]];
+const NEEDS_H = { code: 18, spark: 18, bars: 20, wave: 18, gauge: 16 };
+function pickBlock(h) {
+  for (let tries = 0; tries < 8; tries++) {
+    let r = rnd() * 100, name = 'para';
+    for (const [n, w] of BLOCK_W) { r -= w; if (r <= 0) { name = n; break; } }
+    if (!NEEDS_H[name] || h >= NEEDS_H[name]) return name;
+  }
+  return pick(['para', 'kv', 'matrix', 'barcode']);
+}
+function renderSlot(s) {
+  const band = RO - R, h = s.hpx;
+  const c = document.createElement('canvas');
+  c.width = Math.ceil(band * RING_SC); c.height = Math.ceil((h + 2) * RING_SC);
+  const x = c.getContext('2d'); x.scale(RING_SC, RING_SC); x.textBaseline = 'top';
+  const RB = rimW(), dz0 = RB + 6, dz1 = band * 0.72, oz0 = band * 0.78, oz1 = band - RB - 5;
+  const split = rnd() < 0.45 && dz1 - dz0 > 60;
+  const blocks = [];
+  if (split) { const m = dz0 + (dz1 - dz0) * rr(0.42, 0.6); blocks.push([dz0, m], [m + rr(4, 8), dz1]); }
+  else blocks.push([dz0, dz1 - rr(0, 18)]);
+  for (const [b0, b1] of blocks) {
+    const tint = pick(TINTS), y0 = 1 + rr(0, 2), y1 = h + 1 - rr(0, 2);
+    x.save(); x.beginPath(); x.rect(b0, y0 - 0.5, b1 - b0, y1 - y0 + 1); x.clip();
+    BLOCKS[pickBlock(y1 - y0)](x, b0, b1, y0, y1, tint);
+    x.restore();
+  }
+  // outer index column: tiny ids + tick groups
+  const pitch = rr(8, 12);
+  x.font = `600 3.1px ${FONT}`;
+  for (let yy = rr(1, pitch); yy < h - 2; yy += pitch) {
+    if (rnd() < 0.15) continue;
+    let xx = oz0 + rr(0, 3);
+    if (rnd() < 0.45) { x.fillStyle = `rgba(225,228,236,${rr(0.55, 0.95)})`; x.fillText(String((rnd() * 999) | 0).padStart(3, '0'), xx, yy - 1); xx += 9; }
+    const n = 1 + (rnd() * 3 | 0);
+    for (let i = 0; i < n && xx < oz1; i++) { x.fillStyle = `rgba(225,228,236,${rr(0.5, 0.95)})`; x.fillRect(xx, yy, rr(1.2, 2.4), 1.2); xx += rr(2.4, 3.6); }
+  }
+  if (rnd() < 0.45) {
+    x.fillStyle = 'rgba(220,224,232,.7)';
+    for (let xx = dz0; xx < oz1; xx += rr(2.4, 4.5)) if (rnd() < 0.8) x.fillRect(xx, h + 0.4, 1.1, 1.1);
+  }
+  s.c = c;
+}
+function rimW() { return Math.max(3, (RO - R) * 0.065 * C.rimWidth); }
+function drawRing(dt) {
+  const band = RO - R;
+  S.globalCompositeOperation = 'source-over';
+  S.save(); S.translate(cx, cy);
+  S.beginPath(); S.arc(0, 0, RO, 0, TAU); S.arc(0, 0, R, 0, TAU, true);
+  S.fillStyle = '#040506'; S.fill('evenodd');
+  let regen = 1;
+  for (const s of slots) {
+    const A = s.a + ringRot;
+    if (s.flash > 0) s.flash = Math.max(0, s.flash - dt * 2.2);
+    const mid = R + band * 0.42;
+    const sp = toScreen(cx + Math.cos(A) * mid, cy + Math.sin(A) * mid);
+    if (sp.x < -140 || sp.x > W + 140 || sp.y < -140 || sp.y > H + 140) continue;
+    if (!s.c || (regen > 0 && rnd() < 0.02)) { renderSlot(s); regen--; }
+    S.save(); S.rotate(A);
+    const hh = s.hpx + 2;
+    S.drawImage(s.c, R, -hh / 2, band, hh);
+    if (s.flash > 0.02) { S.globalCompositeOperation = 'lighter'; S.globalAlpha = s.flash; S.drawImage(s.c, R, -hh / 2, band, hh); S.globalAlpha = 1; S.globalCompositeOperation = 'source-over'; }
+    S.restore();
+  }
+  // rulers & rim bands (all rotate with the ring)
+  const tick = (step, fn) => {
+    const n0 = Math.floor((-thV - 0.05 - ringRot) / step), n1 = Math.ceil((thV + 0.05 - ringRot) / step);
+    for (let n = n0; n <= n1; n++) { const a = n * step + ringRot; fn(Math.cos(a), Math.sin(a), n); }
+  };
+  const RB = rimW();
+  // inner + outer rim bands: dense white hairlines that give the edge its thickness
+  S.beginPath();
+  tick(0.14 / C.rimDensity * Math.PI / 180, (ca, sa, n) => {
+    const m = ((n % 6) + 6) % 6;
+    const li = m === 0 ? RB : RB * (0.5 + 0.35 * hash(n));
+    const lo = m === 0 ? RB : RB * (0.5 + 0.35 * hash(n + 77));
+    S.moveTo(ca * (R + 1.5), sa * (R + 1.5)); S.lineTo(ca * (R + 1.5 + li), sa * (R + 1.5 + li));
+    S.moveTo(ca * (RO - 1.5), sa * (RO - 1.5)); S.lineTo(ca * (RO - 1.5 - lo), sa * (RO - 1.5 - lo));
+  });
+  S.globalCompositeOperation = 'lighter';
+  S.strokeStyle = `rgba(232,235,242,${Math.min(1, 0.035 * C.rimBright * C.rimBright)})`; S.lineWidth = 1.2 + 2.4 * C.rimBright; S.stroke();   // glow grows with brightness
+  S.strokeStyle = `rgba(232,235,242,${Math.min(1, 0.08 * C.rimBright)})`; S.lineWidth = 1.4; S.stroke();
+  S.globalCompositeOperation = 'source-over'; S.strokeStyle = `rgba(240,242,248,${Math.min(1, 0.88 * C.rimBright)})`; S.lineWidth = 0.55; S.stroke();
+  // rims
+  const arc = (r, lw, a) => { S.strokeStyle = `rgba(232,235,242,${a})`; S.lineWidth = lw; S.beginPath(); S.arc(0, 0, r, -thV, thV); S.stroke(); };
+  arc(R, 1.5, 1); arc(R + RB + 3, 0.6, 0.6); arc(RO - RB - 3, 0.6, 0.55);
+  S.globalCompositeOperation = 'lighter'; arc(RO, 3.5, 0.1); S.globalCompositeOperation = 'source-over';
+  arc(RO, 1.3, 0.95);
+  S.beginPath();
+  tick(1 * Math.PI / 180, (ca, sa) => { S.moveTo(ca * (R - 2), sa * (R - 2)); S.lineTo(ca * (R - 5), sa * (R - 5)); });
+  tick(0.25 * Math.PI / 180, (ca, sa, n) => {
+    const m = ((n % 20) + 20) % 20, L = m === 0 ? 9 : m % 5 === 0 ? 5 : 2.5;
+    S.moveTo(ca * (RO + 2), sa * (RO + 2)); S.lineTo(ca * (RO + 2 + L), sa * (RO + 2 + L));
+  });
+  S.strokeStyle = 'rgba(230,233,240,.5)'; S.lineWidth = 0.6; S.stroke();
+  S.restore();
+}
+
+/* ---------- frame ---------- */
+function drawStage(dt) {
+  updateBeat(dt); updateCam(dt); updateOuter(dt);
+  if (rnd() < dt * C.cometTrickle) spawnComet();
+  webRot += dt * (0.03 + env * 0.12) * C.webSpin;
+  updateRing(dt);
+  for (let k = 0; k < 3; k++) layerEnv[k] *= Math.exp(-dt * 2.2);
+
+  // background
+  setXf(S, DPR, 1, 0, 0);
+  S.globalCompositeOperation = 'source-over'; S.globalAlpha = 1;
+  S.fillStyle = '#08090b'; S.fillRect(0, 0, W, H);
+
+  // glow buffer (low-res, blurred later)
+  const G = glowC.x;
+  G.setTransform(1, 0, 0, 1, 0, 0); G.clearRect(0, 0, glowC.width, glowC.height);
+  camT(G, 1 / GS); G.globalCompositeOperation = 'lighter';
+
+  camTk(S, DPR, 1 - 0.1 * C.parallax);   // the web sits a little further back
+
+  // inner web + pulsing layers
+  S.save(); S.translate(cx, cy); S.rotate(webRot);
+  const ws = 2 * R + 4;
+  S.drawImage(webBase, -R - 2, -R - 2, ws, ws);
+  S.globalCompositeOperation = 'lighter';
+  webLayers.forEach((c, k) => { S.globalAlpha = Math.min(1, C.webPulseBase + C.webPulseAmp * layerEnv[k]); S.drawImage(c, -R - 2, -R - 2, ws, ws); });
+  S.globalAlpha = 1;
+
+  // runners: speed surges on the beat
+  const tx = trailC.x, surge = 0.5 + 2.5 * env;
+  while (runners.length < C.runnerCount) runners.push(newRunner(true));
+  if (runners.length > C.runnerCount) runners.length = Math.max(0, Math.round(C.runnerCount));
+  tx.globalCompositeOperation = 'destination-out';
+  tx.fillStyle = `rgba(0,0,0,${0.05 + env * 0.05})`; tx.fillRect(0, 0, ws, ws);
+  tx.globalCompositeOperation = 'source-over';
+  tx.save(); tx.translate(R + 2, R + 2); tx.lineCap = 'round';
+  for (let i = 0; i < runners.length; i++) {
+    const r = runners[i];
+    r.t += dt * C.runnerSpeed * (r.mode === 1 ? r.sp * surge : r.mode === 2 ? r.sp + 1.3 * r.t * r.t : r.sp);
+    if (r.t >= 1) { runners[i] = newRunner(false); continue; }
+    const p = qpt(r.cv, r.t);
+    tx.strokeStyle = r.b ? `rgba(240,166,198,${Math.min(1, 0.9 * C.runnerBright)})` : `rgba(250,251,255,${Math.min(1, 0.75 * C.runnerBright)})`;
+    tx.lineWidth = (r.b ? 1.3 : 0.9) * C.runnerWidth;
+    tx.beginPath(); tx.moveTo(r.px, r.py); tx.lineTo(p.x, p.y); tx.stroke();
+    r.px = p.x; r.py = p.y;
+  }
+  tx.restore();
+  S.drawImage(trailC, -R - 2, -R - 2, ws, ws);
+  S.restore();
+  camT(S, DPR);
+  // ring occlusion: the web darkens toward the ring, separating the two planes
+  if (C.ringShadow > 0) {
+    const sg = S.createRadialGradient(cx, cy, R - 110, cx, cy, R);
+    sg.addColorStop(0, 'rgba(4,5,6,0)'); sg.addColorStop(1, `rgba(4,5,6,${Math.min(1, 0.8 * C.ringShadow)})`);
+    S.globalCompositeOperation = 'source-over'; S.globalAlpha = 1; S.fillStyle = sg;
+    S.beginPath(); S.arc(cx, cy, R, 0, TAU); S.arc(cx, cy, R - 110, 0, TAU, true); S.fill('evenodd');
+  }
+
+  // comets
+  S.save(); S.translate(cx, cy); S.globalCompositeOperation = 'lighter'; S.lineCap = 'round';
+  G.save(); G.translate(cx, cy);
+  for (let i = comets.length - 1; i >= 0; i--) {
+    const c = comets[i];
+    c.life += dt;
+    const p = easeIO(Math.min(1, c.life / c.dur));
+    const head = Math.min(1, p * (1 + c.win)), tail = Math.max(0, p * (1 + c.win) - c.win);
+    const fade = c.life > c.dur ? Math.max(0, 1 - (c.life - c.dur) / 0.25) : 1;
+    if (fade <= 0) { comets.splice(i, 1); continue; }
+    const cr = C.cometFollow ? ringRot - c.rot0 : 0;
+    if (head >= 1 && !c.hit) { c.hit = true; const pe = cpt(c.lines[c.lines.length >> 1], 1); flashSlotAt(Math.atan2(pe.y, pe.x) + cr); }
+    S.save(); S.rotate(cr); G.save(); G.rotate(cr);
+    const col = c.tint ? '200,190,250' : '255,255,255';
+    S.strokeStyle = `rgba(${col},${Math.min(1, 0.5 * fade * C.cometBright)})`; S.lineWidth = 1;
+    strokeComet(S, c, tail, head, 18);
+    const hs = head - (head - tail) * 0.35;
+    S.strokeStyle = `rgba(${col},${Math.min(1, fade * C.cometBright)})`; S.lineWidth = 1.7;
+    strokeComet(S, c, hs, head, 8);
+    if (c.glow && C.cometGlow > 0) { G.strokeStyle = `rgba(${col},${Math.min(1, 0.5 * fade * C.cometGlow)})`; G.lineWidth = 2.8; strokeComet(G, c, hs, head, 6); }
+    G.restore(); S.restore();
+  }
+  G.restore();
+  S.restore();
+
+  // outer wedges
+  S.globalCompositeOperation = 'lighter';
+  S.drawImage(laneC, 0, 0, W, H);
+  // far outer layers 鈫?half-res buffer, composited blurred (depth of field)
+  const F = farC.x;
+  F.setTransform(1, 0, 0, 1, 0, 0); F.globalAlpha = 1; F.globalCompositeOperation = 'source-over'; F.clearRect(0, 0, farC.width, farC.height);
+  camT(F, FS); F.globalCompositeOperation = 'lighter';
+  S = F; drawOuterFar(); S = S_MAIN;
+  S.save(); setXf(S, DPR, 1, 0, 0); S.globalCompositeOperation = 'lighter';
+  if (HAS_FILTER && C.depthBlur > 0) S.filter = `blur(${C.depthBlur}px)`;
+  S.globalAlpha = Math.min(1, C.depthDim); S.drawImage(farC, 0, 0, W, H);
+  S.restore();
+  // atmosphere: faint scattered light just beyond the ring
+  if (C.atmos > 0) {
+    const ag = S.createRadialGradient(cx, cy, RO, cx, cy, RO + (RMAX - RO) * 0.7);
+    ag.addColorStop(0, `rgba(190,180,240,${Math.min(1, 0.07 * C.atmos)})`); ag.addColorStop(0.4, `rgba(150,145,210,${Math.min(1, 0.028 * C.atmos)})`); ag.addColorStop(1, 'rgba(0,0,0,0)');
+    S.globalAlpha = 1; S.fillStyle = ag; S.beginPath(); S.arc(cx, cy, RMAX, 0, TAU); S.arc(cx, cy, RO, 0, TAU, true); S.fill('evenodd');
+  }
+  drawOuterNear();
+
+  drawRing(dt);
+
+  // composite soft glow
+  setXf(S, DPR, 1, 0, 0);
+  S.globalCompositeOperation = 'lighter';
+  if (HAS_FILTER) S.filter = 'blur(6px)';
+  S.globalAlpha = Math.min(1, 0.9 * C.glow);
+  S.drawImage(glowC, 0, 0, glowC.width * GS, glowC.height * GS);
+  if (HAS_FILTER) S.filter = 'none';
+  S.globalAlpha = 1; S.globalCompositeOperation = 'source-over';
+
+  drawBokeh(dt);
+  if (C.vignette > 0) {
+    setXf(S, DPR, 1, 0, 0);
+    const vg = S.createRadialGradient(W * 0.45, H * 0.5, Math.min(W, H) * 0.35, W * 0.45, H * 0.5, Math.hypot(W, H) * 0.62);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, `rgba(0,0,0,${Math.min(1, 0.75 * C.vignette)})`);
+    S.fillStyle = vg; S.fillRect(0, 0, W, H);
+  }
+
+  drawCallout();
+}
+
+/* ---------- callout box with leader line (follows the camera) ---------- */
+let CHECKS = [['GATEWAY', '—'], ['EYE', '—'], ['API 8642', '—'], ['QUOTA', '—'], ['FAILED JOBS', '—'], ['APPROVALS', '—']];
+let chkI = 0;
+const chkEl = document.getElementById('chk');
+function drawCallout() {
+  chkEl.style.display = ROT ? 'none' : '';
+  if (ROT) return;
+  const a = -thS * 0.32;
+  const anchor = toScreen(cx + Math.cos(a) * (RO + 30), cy + Math.sin(a) * (RO + 30));
+  const box = toScreen(cx + Math.cos(a) * (RO + 30) + 120, cy + Math.sin(a) * (RO + 30) - 40);
+  const bx = Math.min(W - 190, Math.max(8, box.x)), by = Math.min(H - 60, Math.max(40, box.y));
+  chkEl.style.transform = `translate(${bx}px,${by}px)`;
+  S.strokeStyle = 'rgba(230,233,238,.55)'; S.lineWidth = 0.8;
+  S.beginPath(); S.moveTo(anchor.x, anchor.y); S.lineTo(bx, by + 12); S.stroke();
+  S.fillStyle = '#fff'; S.fillRect(anchor.x - 1.5, anchor.y - 1.5, 3, 3);
+}
+setInterval(() => {
+  chkEl.style.opacity = 0;
+  setTimeout(() => {
+    chkI = (chkI + 1) % CHECKS.length;
+    document.getElementById('chkK').textContent = CHECKS[chkI][0];
+    document.getElementById('chkV').textContent = CHECKS[chkI][1];
+    chkEl.style.opacity = 1;
+  }, 400);
+}, 3600);
+
+/* =========================================================
+   HERMES DATA LAYER
+   Phase 1: STATE is null -> every slot prints "—".
+   Phase 3 wires /api/halo into renderAll(state); no random telemetry.
+   ========================================================= */
+const DASH = '—';
+let STATE = null;
+const HISTORY = { quota: [[], [], []] };
+const KPI_SCALE = { messages: 200, review: 6 };
+const KPI_EL = [0, 1, 2, 3, 4].map(i => document.getElementById('k' + i));
+const SEG_EL = [...document.querySelectorAll('.kpi .seg i')];
+const feedEl = document.getElementById('feed');
+const codeEl = document.getElementById('code');
+const routesEl = document.getElementById('routes');
+const agEl = document.getElementById('agents');
+const tokInEl = document.getElementById('tokIn');
+const tokOutEl = document.getElementById('tokOut');
+const tokAllEl = document.getElementById('tokAll');
+const stBigEl = document.getElementById('stBig');
+const haloStateEl = document.getElementById('haloState');
+const haloStateTextEl = document.getElementById('haloStateText');
+const haloUpdatedEl = document.getElementById('haloUpdated');
+
+const fmt = v => (v === null || v === undefined || v === '') ? DASH : v;
+const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const clampPct = v => Math.max(0, Math.min(100, Number(v) || 0));
+const pctOf = (a, b) => (a == null || b == null || Number(b) === 0) ? 0 : clampPct(Number(a) / Number(b) * 100);
+const fmtCompact = n => {
+  if (n == null) return DASH;
+  const v = Number(n);
+  if (!Number.isFinite(v)) return DASH;
+  if (Math.abs(v) >= 1e9) return (v / 1e9).toFixed(1) + 'B';
+  if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+  if (Math.abs(v) >= 1e3) return (v / 1e3).toFixed(1) + 'K';
+  return String(v);
+};
+const fmtClock = iso => {
+  if (!iso || typeof iso !== 'string') return DASH;
+  const m = iso.match(/T(\d{2}:\d{2})/);
+  if (m) return m[1];
+  const m2 = iso.match(/\b(\d{2}:\d{2})\b/);
+  return m2 ? m2[1] : (iso.length >= 5 ? iso.slice(-5) : iso);
+};
+const RESULT_LABEL = { success: 'OK', silent: 'SILENT', failed: 'FAIL', skipped: 'SKIP', unknown: '—' };
+const resultLabel = v => RESULT_LABEL[v] || (v ? String(v).toUpperCase().slice(0, 6) : DASH);
+
+/* ---------- header ---------- */
+function kpiSeg(i, pct) { if (SEG_EL[i]) SEG_EL[i].style.width = clampPct(pct) + '%'; }
+function renderKpi(summary) {
+  const s = summary || {};
+  KPI_EL[0].textContent = fmt(s.messages_today);
+  KPI_EL[1].textContent = s.roles_online == null ? DASH : `${fmt(s.roles_online)} / ${fmt(s.roles_total)}`;
+  KPI_EL[2].textContent = fmt(s.jobs_total);
+  KPI_EL[3].textContent = s.services_online == null ? DASH : `${fmt(s.services_online)} / ${fmt(s.services_total)}`;
+  let review = DASH;
+  if (s.approvals_pending != null) review = Number(s.approvals_pending) + Number(s.jobs_failed || 0);
+  else if (STATE && STATE.viewer === 'guest' && s.jobs_failed != null) review = s.jobs_failed;
+  KPI_EL[4].textContent = review;
+  kpiSeg(0, s.messages_today == null ? 0 : Number(s.messages_today) / KPI_SCALE.messages * 100);
+  kpiSeg(1, pctOf(s.roles_online, s.roles_total));
+  kpiSeg(2, s.jobs_total == null ? 0 : pctOf(Math.max(0, Number(s.jobs_total) - Number(s.jobs_failed || 0)), s.jobs_total));
+  kpiSeg(3, pctOf(s.services_online, s.services_total));
+  kpiSeg(4, typeof review === 'number' ? review / KPI_SCALE.review * 100 : 0);
+}
+function renderStatus(summary) {
+  const s = summary || {};
+  stBigEl.textContent = `${fmt(s.services_online)} / ${fmt(s.services_total)} SERVICES · ${fmt(s.jobs_failed)} JOBS FAILED`;
+}
+
+/* ---------- event feed ---------- */
+const EVENT_TAG = { service: 'SVC', cron: 'CRON', approval: 'APPR', error: 'ERR', task: 'TASK', body: 'BODY', alert: 'ALERT', output: 'OUT' };
+function feedRow(tag, cls, text, time) {
+  return `<div title="${esc(text)}"><span class="n">${esc(fmtClock(time))}</span><span class="vb ${cls}">${esc(tag)}</span>${esc(text)}</div>`;
+}
+function renderFeed(state) {
+  if (!state) {
+    feedEl.innerHTML = '<div class="empty"><b>NO EVENTS</b> · AWAITING /API/HALO</div>';
+    return;
+  }
+  const guest = state.viewer === 'guest';
+  let rows = [];
+  if (guest) {
+    rows = (state.jobs || []).slice(-14).reverse().map(j => ({
+      time: j.last_run, tag: 'JOB',
+      cls: j.result === 'failed' ? 'err' : j.result === 'success' || j.result === 'silent' ? 'ok' : '',
+      text: `${resultLabel(j.result)} · 秘密任务`,
+    }));
+  } else {
+    rows = (state.events || []).slice(0, 14).reverse().map(e => ({
+      time: e.time, tag: EVENT_TAG[e.type] || 'EVT',
+      cls: e.severity === 'error' ? 'err' : e.severity === 'warning' ? 'warn' : 'ok',
+      text: `${e.title || ''}${e.detail ? ' · ' + e.detail : ''}`,
+    }));
+  }
+  if (!rows.length) {
+    feedEl.innerHTML = '<div class="empty"><b>NO EVENTS</b> · WINDOW EMPTY</div>';
+    return;
+  }
+  feedEl.innerHTML = rows.map(r => feedRow(r.tag, r.cls, r.text, r.time)).join('');
+}
+
+/* ---------- exec log ---------- */
+function renderLog(state) {
+  if (!state) {
+    codeEl.innerHTML = '<div><span class="ln">000</span><span class="op">awaiting log stream …</span><span class="caret"></span></div>';
+    return;
+  }
+  const guest = state.viewer === 'guest';
+  let lines = [];
+  if (guest) {
+    lines = (state.jobs || []).slice(-12).map(j => `${resultLabel(j.result)} · 秘密任务 · ${fmtClock(j.last_run)}`);
+  } else {
+    lines = (state.logs || []).slice(-12).map(l => (l && l.line) ? l.line : String(l || ''));
+  }
+  if (!lines.length) {
+    codeEl.innerHTML = '<div><span class="ln">000</span><span class="op">no log lines in window</span><span class="caret"></span></div>';
+    return;
+  }
+  codeEl.innerHTML = lines.map((line, i) =>
+    `<div><span class="ln">${String(i + 1).padStart(3, '0')}</span>${esc(line)}</div>`
+  ).join('') + '<div><span class="ln">···</span><span class="caret"></span></div>';
+}
+
+/* ---------- delivery routes ---------- */
+const CHANNEL_SHORT = { 'Telegram': 'TG', 'DC #教义厅': 'DC', '冲冲冲房': 'GUILD', '小黑盒': 'HX', 'BiuNews': 'NEWS', 'Bark': 'BARK' };
+const shortChannel = v => CHANNEL_SHORT[v] || String(v || DASH).replace(/^DC\s*/, '').slice(0, 5);
+const DEFAULT_CHANNELS = ['TG', 'DC', 'HX', 'BARK'];
+function renderRoutes(state) {
+  if (!state) {
+    routesEl.style.gridTemplateColumns = '1.5fr repeat(4,minmax(0,1fr))';
+    let h = '<span class="h">SENTINEL</span>' + DEFAULT_CHANNELS.map(c => `<span class="h">${c}</span>`).join('');
+    for (let i = 0; i < 6; i++) {
+      h += `<span class="nm">${DASH}</span>` + DEFAULT_CHANNELS.map(() => '<span><span class="chip">—</span></span>').join('');
+    }
+    routesEl.innerHTML = h;
+    return;
+  }
+  if (state.viewer === 'guest') {
+    const rows = state.delivery_summary || [];
+    routesEl.style.gridTemplateColumns = '1.6fr .7fr .7fr';
+    let h = '<span class="h">CHANNEL</span><span class="h">OK</span><span class="h">FAIL</span>';
+    if (!rows.length) {
+      h += `<span class="nm">${DASH}</span><span class="nm">${DASH}</span><span class="nm">${DASH}</span>`;
+    } else {
+      rows.slice(0, 7).forEach(r => {
+        h += `<span class="nm" title="${esc(r.target)}">${esc(shortChannel(r.target))}</span>`;
+        h += `<span class="nm">${esc(fmt(r.ok))}</span><span class="nm" style="color:var(--pink)">${esc(fmt(r.failed))}</span>`;
+      });
+    }
+    routesEl.innerHTML = h;
+    return;
+  }
+  const outputs = state.outputs || [];
+  const seen = [];
+  outputs.forEach(o => (o.deliveries || []).forEach(d => { if (d && d.target && !seen.includes(d.target)) seen.push(d.target); }));
+  const channels = (seen.length ? seen : DEFAULT_CHANNELS).slice(0, 4);
+  routesEl.style.gridTemplateColumns = `1.5fr repeat(${channels.length},minmax(0,1fr))`;
+  let h = '<span class="h">SENTINEL</span>' + channels.map(c => `<span class="h" title="${esc(c)}">${esc(shortChannel(c))}</span>`).join('');
+  const rows = outputs.slice(0, 6);
+  if (!rows.length) {
+    h += `<span class="nm">${DASH}</span>` + channels.map(() => '<span><span class="chip">—</span></span>').join('');
+  } else {
+    rows.forEach(o => {
+      h += `<span class="nm" title="${esc(o.name)}">${esc(o.name || DASH)}</span>`;
+      channels.forEach(ch => {
+        const d = (o.deliveries || []).find(x => x.target === ch);
+        if (!d) h += '<span><span class="chip"></span></span>';
+        else h += `<span><span class="chip ${d.ok ? 'done' : 'pk'}" title="${esc(d.note || '')}">${d.ok ? 'OK' : 'FAIL'}</span></span>`;
+      });
+    });
+  }
+  routesEl.innerHTML = h;
+}
+
+/* ---------- units / dispatch ---------- */
+const UNIT_ROWS = [
+  ['01', '网关', 'svc'], ['02', '汉堡大王', 'svc'], ['03', 'biubiu房', 'svc'],
+  ['04', '之眼', 'svc'], ['05', '夜巡', 'svc'], ['06', '守卫', 'svc'],
+  ['07', '憨包', 'role'], ['08', '汉堡', 'role'], ['09', 'biubiu', 'role'],
+  ['10', 'TG', 'chan'], ['11', 'DC', 'chan'], ['12', 'HX', 'chan'],
+];
+const SVC_SHORT = { 'hermes-gateway': '网关', 'hermes-heybox': '汉堡大王', 'hermes-biubiu': 'biubiu房', 'hermes-eye': '之眼', 'hamburger-nightwatch': '夜巡', 'hamburger-guild-guard': '守卫' };
+const CELL = { on: '#b9bcc4', off: '#1d1f24', err: 'rgba(240,166,198,.85)', mid: '#5a5e66', none: '#1d1f24' };
+function cellHtml(bg) { return `<i style="background:${bg}"></i>`; }
+function unitRowHtml(id, label, cells, status, cls) {
+  return `<div class="ag"><span class="id">${esc(id)}</span><span class="rl" title="${esc(label)}">${esc(label)}</span>` +
+    `<span class="cells">${cells.map(cellHtml).join('')}</span><span class="st ${cls || ''}">${esc(status)}</span></div>`;
+}
+function hourWindow(state) {
+  const cells = state.activity?.cells || [];
+  let maxHour = null;
+  cells.forEach(c => { if (c.date === todayServer(state) && (maxHour == null || c.hour > maxHour)) maxHour = c.hour; });
+  if (maxHour == null) maxHour = new Date().getHours();
+  return { cells, maxHour };
+}
+function todayServer(state) {
+  const iso = state?.generated_at || '';
+  const m = iso.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : new Date().toISOString().slice(0, 10);
+}
+function roleCells(state, role, maxHour) {
+  const cells = state.activity?.cells || [];
+  const out = [];
+  for (let h = maxHour - 5; h <= maxHour; h++) {
+    if (h < 0) { out.push(CELL.none); continue; }
+    const n = cells.filter(c => c.role === role && c.date === todayServer(state) && c.hour === h)
+      .reduce((a, c) => a + (c.count || 0), 0);
+    out.push(n > 0 ? CELL.on : CELL.off);
+  }
+  return out;
+}
+function channelCells(state, target) {
+  const rows = (state.outputs || []).slice(-6).reverse();
+  const out = [];
+  for (let i = 0; i < 6; i++) {
+    const o = rows[i];
+    if (!o) { out.push(CELL.none); continue; }
+    const d = (o.deliveries || []).find(x => x.target === target);
+    out.push(!d ? CELL.none : d.ok ? CELL.on : CELL.err);
+  }
+  return out;
+}
+function buildUnitRows(state) {
+  if (!state) return UNIT_ROWS.map(([id, label]) => ({ id, label, cells: [CELL.none, CELL.none, CELL.none, CELL.none, CELL.none, CELL.none], status: DASH, cls: '' }));
+  const rows = [];
+  const services = (state.services || []).slice(0, 6);
+  services.forEach((s, i) => {
+    const segs = (s.segments || []).slice(-6);
+    const cells = segs.map(seg => seg.up ? (s.state === 'active' ? CELL.on : CELL.mid) : CELL.err);
+    while (cells.length < 6) cells.unshift(CELL.none);
+    rows.push({ id: String(i + 1).padStart(2, '0'), label: SVC_SHORT[s.unit] || s.label || s.unit, cells,
+      status: s.state === 'active' ? 'ON' : (s.state === 'failed' ? 'FAIL' : 'OFF'), cls: s.state === 'active' ? 'w' : 'err' });
+  });
+  while (rows.length < 6) rows.push({ id: String(rows.length + 1).padStart(2, '0'), label: DASH, cells: [CELL.none, CELL.none, CELL.none, CELL.none, CELL.none, CELL.none], status: DASH, cls: '' });
+  const { maxHour } = hourWindow(state);
+  (state.roles || []).slice(0, 3).forEach((r, i) => {
+    rows.push({ id: String(7 + i).padStart(2, '0'), label: r.name || r.id || DASH, cells: roleCells(state, r.id, maxHour),
+      status: r.state_label || DASH, cls: r.state === 'online' ? 'w' : (r.state === 'offline' ? 'err' : '') });
+  });
+  while (rows.length < 9) rows.push({ id: String(rows.length + 1).padStart(2, '0'), label: DASH, cells: [CELL.none, CELL.none, CELL.none, CELL.none, CELL.none, CELL.none], status: DASH, cls: '' });
+  const channels = (state.delivery_summary || []).slice(0, 3);
+  channels.forEach((c, i) => {
+    rows.push({ id: String(10 + i).padStart(2, '0'), label: shortChannel(c.target), cells: channelCells(state, c.target),
+      status: `${fmt(c.ok)}/${fmt((c.ok || 0) + (c.failed || 0))}`, cls: (c.failed || 0) ? 'err' : 'w' });
+  });
+  while (rows.length < 12) rows.push({ id: String(rows.length + 1).padStart(2, '0'), label: DASH, cells: [CELL.none, CELL.none, CELL.none, CELL.none, CELL.none, CELL.none], status: DASH, cls: '' });
+  return rows.slice(0, 12);
+}
+function renderUnits(state) {
+  agEl.innerHTML = buildUnitRows(state).map(r => unitRowHtml(r.id, r.label, r.cells, r.status, r.cls)).join('');
+}
+
+/* ---------- token stats ---------- */
+function renderTokenStats(state) {
+  const usage = state && state.usage;
+  let tin = null, tout = null;
+  if (usage && Array.isArray(usage.profiles)) {
+    const known = usage.profiles.filter(p => p.tokens_in != null || p.tokens_out != null);
+    if (known.length) {
+      tin = known.reduce((a, p) => a + Number(p.tokens_in || 0), 0);
+      tout = known.reduce((a, p) => a + Number(p.tokens_out || 0), 0);
+    }
+  }
+  const total = state?.summary?.tokens_today ?? ((tin != null && tout != null) ? tin + tout : null);
+  tokInEl.textContent = fmtCompact(tin);
+  tokOutEl.textContent = fmtCompact(tout);
+  tokAllEl.textContent = fmtCompact(total);
+}
+
+/* ---------- checks callout ---------- */
+function buildChecks(state) {
+  if (!state) {
+    CHECKS = [['GATEWAY', DASH], ['EYE', DASH], ['API 8642', DASH], ['QUOTA', DASH], ['FAILED JOBS', DASH], ['APPROVALS', DASH]];
+    return;
+  }
+  const units = Object.fromEntries((state.services || []).map(s => [s.unit, s]));
+  const gateway = units['hermes-gateway'];
+  const eye = units['hermes-eye'];
+  const s = state.summary || {};
+  CHECKS = [
+    ['GATEWAY', gateway ? (gateway.state === 'active' ? 'ACTIVE' : 'DOWN') : DASH],
+    ['EYE', eye ? (eye.state === 'active' ? 'ACTIVE' : 'DOWN') : DASH],
+    ['API 8642', s.api_ok == null ? DASH : s.api_ok ? 'UP' : 'DOWN'],
+    ['QUOTA', s.quota_min_remaining == null ? DASH : `${s.quota_min_remaining}% LEFT`],
+    ['FAILED JOBS', s.jobs_failed == null ? DASH : (s.jobs_failed === 0 ? '0 / CLEAR' : `${s.jobs_failed} FAILED`)],
+    ['APPROVALS', s.approvals_pending == null ? (state.viewer === 'guest' ? 'HIDDEN' : DASH) : (s.approvals_pending === 0 ? '0 / CLEAR' : `${s.approvals_pending} PENDING`)],
+  ];
+  if (chkI >= CHECKS.length) chkI = 0;
+}
+
+/* ---------- canvases ---------- */
+const cAdv = document.getElementById('cAdv'), cDiff = document.getElementById('cDiff'), cVal = document.getElementById('cVal'), cIdx = document.getElementById('cIdx');
+let advP = [];
+function resizePanels() {
+  [cAdv, cDiff, cVal, cIdx].forEach(fit);
+  advP = Array.from({ length: 320 }, () => ({ x: rnd() * cAdv.w, y: rnd() * cAdv.h, l: rnd() * 3 }));
+  paintStaticPanels();
+}
+function paintStaticPanels() {
+  if (!cDiff.x || !cVal.x || !cIdx.x) return;
+  drawServiceUptime(STATE);
+  drawQuota(STATE, HISTORY.quota);
+  drawActivityHeatmap(STATE);
+}
+let T = 0;
+const flow = (x, y) => Math.sin(x * 0.035 + T * 0.6) * Math.cos(y * 0.05 - T * 0.4) * Math.PI + Math.sin((x + y) * 0.01 + T * 0.2);
+function drawTokenFlow(dt, state) {
+  const x = cAdv.x, w = cAdv.w, h = cAdv.h;
+  const tokens = state?.summary?.tokens_today;
+  const level = tokens == null ? 0.22 : Math.min(1, 0.28 + Math.log10(Number(tokens) + 1) / 7);
+  const speed = 16 + level * 34;
+  x.fillStyle = 'rgba(14,15,18,0.22)'; x.fillRect(0, 0, w, h);
+  x.fillStyle = 'rgba(120,125,135,.22)';
+  for (let i = 6; i < w; i += 12) for (let j = 6; j < h; j += 12) x.fillRect(i, j, 1, 1);
+  x.strokeStyle = `rgba(235,238,244,${0.18 + level * 0.52})`; x.lineWidth = 0.8; x.beginPath();
+  const n = Math.max(40, Math.round(advP.length * (0.3 + level * 0.7)));
+  for (let i = 0; i < n; i++) {
+    const p = advP[i];
+    const a = flow(p.x, p.y), nx = p.x + Math.cos(a) * speed * dt, ny = p.y + Math.sin(a) * speed * dt;
+    x.moveTo(p.x, p.y); x.lineTo(nx + Math.cos(a) * 2, ny + Math.sin(a) * 2);
+    p.x = nx; p.y = ny; p.l -= dt;
+    if (p.l < 0 || p.x < 0 || p.x > w || p.y < 0 || p.y > h) { p.x = rnd() * w; p.y = rnd() * h; p.l = rr(1, 4); }
+  }
+  x.stroke();
+}
+
+function drawServiceUptime(state) {
+  const x = cDiff.x, w = cDiff.w, h = cDiff.h;
+  x.clearRect(0, 0, w, h);
+  x.font = `600 6.5px ${FONT}`; x.textBaseline = 'middle';
+  const lx = 46, top = 8, cols = 48;
+  const gridH = h * 0.68;
+  const rh = (gridH - top) / 6;
+  const cw = Math.max(1, (w - lx - 2) / cols);
+  const units = (state?.services || []).slice(0, 6);
+  x.fillStyle = '#5f646d'; x.fillText('24H', lx, 3);
+  x.fillText('DOWN', w - 24, 3);
+  for (let j = 0; j < 6; j++) {
+    const unit = units[j];
+    const label = unit ? (SVC_SHORT[unit.unit] || unit.label || unit.unit) : DASH;
+    x.fillStyle = '#6b6f78'; x.fillText(label, 0, top + j * rh + rh / 2);
+    const segs = unit?.segments || [];
+    for (let i = 0; i < cols; i++) {
+      const seg = segs[i];
+      let col = '#15171b';
+      if (seg) col = seg.up ? (unit.state === 'active' ? '#b9bcc4' : '#5a5e66') : '#f0a6c6';
+      x.fillStyle = col;
+      x.fillRect(lx + i * cw, top + j * rh + 0.4, Math.max(0.6, cw - 0.7), Math.max(1, rh - 1.2));
+    }
+  }
+  const by = top + 6 * rh + 3, bh = Math.max(2, h - by);
+  x.fillStyle = '#5f646d'; x.fillText('DOWNTIME', 0, by + 2);
+  const bw = Math.min(10, (w - lx) / 6 - 3);
+  for (let j = 0; j < 6; j++) {
+    const unit = units[j];
+    const segs = unit?.segments || [];
+    const down = segs.length ? segs.filter(s => !s.up).length : 0;
+    const bh2 = segs.length ? Math.max(1, (down / 48) * (bh - 4)) : 0;
+    x.fillStyle = down ? '#f0a6c6' : '#2b2e34';
+    x.fillRect(lx + j * ((w - lx) / 6) + bw / 2, by + bh - bh2, bw, Math.max(1, bh2));
+  }
+}
+
+function ditherLine(x, x0, x1, y, w) {
+  x.strokeStyle = '#1f2227'; x.lineWidth = 1; x.setLineDash([2, 3]);
+  x.beginPath(); x.moveTo(x0, y); x.lineTo(x1, y); x.stroke(); x.setLineDash([]);
+}
+function drawQuota(state, history) {
+  const x = cVal.x, w = cVal.w, h = cVal.h;
+  x.clearRect(0, 0, w, h);
+  x.font = `600 6.5px ${FONT}`; x.textBaseline = 'middle';
+  const lw = 48, rw = 28, names = ['ROLLING', 'WEEKLY', 'MONTHLY'];
+  const quota = (state?.usage?.quota || []).filter(q => q.available);
+  const main = quota[0] || null;
+  const vals = main ? [main.rolling, main.weekly, main.monthly] : [null, null, null];
+  const rh = h / 3;
+  for (let k = 0; k < 3; k++) {
+    const yc = rh * k + rh / 2;
+    const raw = vals[k];
+    const left = raw == null ? null : Math.max(0, Math.min(100, 100 - Number(raw)));
+    x.fillStyle = '#8a8e97'; x.fillText(names[k], 0, yc);
+    ditherLine(x, lw, w - rw, yc, 1);
+    if (left != null) {
+      const hist = history[k];
+      if (!hist.length) {
+        x.fillStyle = '#f0a6c6'; x.beginPath(); x.arc(w - rw, yc - (left - 50) * rh * 0.006, 1.8, 0, TAU); x.fill();
+      } else {
+        x.strokeStyle = k === 0 ? '#f0a6c6' : '#cfd2d8'; x.lineWidth = 1.2;
+        x.beginPath();
+        const n = hist.length, step = Math.min(3, (w - lw - rw) / Math.max(1, n));
+        hist.forEach((v, i) => {
+          const px = w - rw - (n - 1 - i) * step;
+          const py = yc - (v - 50) * rh * 0.006;
+          i ? x.lineTo(px, py) : x.moveTo(px, py);
+        });
+        x.stroke();
+        x.fillStyle = k === 0 ? '#f0a6c6' : '#cfd2d8'; x.beginPath(); x.arc(w - rw, yc - (left - 50) * rh * 0.006, 1.6, 0, TAU); x.fill();
+      }
+      x.fillStyle = '#cfd2d8'; x.textAlign = 'right';
+      x.fillText(`${Math.round(left)}%`, w, yc); x.textAlign = 'left';
+    } else {
+      x.fillStyle = '#3f434a'; x.textAlign = 'right'; x.fillText(DASH, w, yc); x.textAlign = 'left';
+    }
+  }
+  if (main) {
+    x.fillStyle = '#5f646d'; x.fillText(main.label || '', lw, 4);
+  }
+}
+
+const DAY_LABELS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+function heatDays(state) {
+  const cells = state?.activity?.cells || [];
+  const dates = [...new Set(cells.map(c => c.date))].filter(Boolean).sort();
+  return dates.length ? dates.slice(-7) : DAY_LABELS;
+}
+function heatColor(v, peak) {
+  if (v == null) return '#131519';
+  if (v === 0) return '#191b20';
+  const t = Math.min(1, v / peak);
+  if (t > 0.82) return '#f0a6c6';
+  if (t > 0.55) return '#b9bcc4';
+  if (t > 0.3) return '#6a6f78';
+  if (t > 0.12) return '#3a3e46';
+  return '#23262b';
+}
+let HEAT_HIT = [];
+function drawActivityHeatmap(state) {
+  const x = cIdx.x, w = cIdx.w, h = cIdx.h;
+  x.clearRect(0, 0, w, h);
+  x.font = `600 6.5px ${FONT}`; x.textBaseline = 'middle';
+  const lx = 26, rx = 2, rows = 7, cols = 24;
+  const top = 8, cw = (w - lx - rx) / cols, ch = (h - top) / rows;
+  const days = heatDays(state);
+  const cells = state?.activity?.cells || [];
+  let peak = 1;
+  const matrix = Array.from({ length: 7 }, () => new Array(24).fill(null));
+  if (cells.length) {
+    cells.forEach(c => {
+      const di = days.indexOf(c.date);
+      if (di < 0 || c.hour == null) return;
+      if (matrix[di][c.hour] == null) matrix[di][c.hour] = 0;
+      matrix[di][c.hour] += (c.count || 0);
+      peak = Math.max(peak, matrix[di][c.hour]);
+    });
+  }
+  HEAT_HIT = [];
+  [0, 6, 12, 18, 23].forEach(hr => {
+    const px = lx + hr * cw + cw / 2;
+    x.fillStyle = '#5f646d'; x.textAlign = hr === 23 ? 'right' : 'center';
+    x.fillText(String(hr).padStart(2, '0'), hr === 23 ? w : px, 4);
+  });
+  x.textAlign = 'left';
+  for (let j = 0; j < rows; j++) {
+    const label = days[j].length > 5 ? days[j].slice(5) : days[j];
+    x.fillStyle = '#6b6f78'; x.fillText(label, 0, top + j * ch + ch / 2);
+    for (let i = 0; i < cols; i++) {
+      const v = matrix[j][i];
+      const px = lx + i * cw, py = top + j * ch;
+      x.fillStyle = heatColor(v, peak);
+      x.fillRect(px, py + 0.5, Math.max(0.6, cw - 0.9), Math.max(1, ch - 1.2));
+      if (v != null) HEAT_HIT.push({ x: px, y: py, w: cw, h: ch, day: days[j], hour: i, count: v });
+    }
+  }
+}
+
+/* ---------- data snapshot ---------- */
+function sampleQuota(state) {
+  const main = (state?.usage?.quota || []).find(q => q.available) || null;
+  const vals = main ? [main.rolling, main.weekly, main.monthly] : [null, null, null];
+  vals.forEach((v, k) => {
+    if (v == null) return;
+    const left = Math.max(0, Math.min(100, 100 - Number(v)));
+    HISTORY.quota[k].push(left);
+    if (HISTORY.quota[k].length > 40) HISTORY.quota[k].shift();
+  });
+}
+function renderAll(state) {
+  STATE = state;
+  const summary = state?.summary || null;
+  renderKpi(summary);
+  renderStatus(summary);
+  renderFeed(state);
+  renderLog(state);
+  renderRoutes(state);
+  renderUnits(state);
+  renderTokenStats(state);
+  buildChecks(state);
+  sampleQuota(state);
+  paintStaticPanels();
+}
+
+function setHaloStatus(kind, text, updated) {
+  haloStateEl.dataset.state = kind;
+  haloStateTextEl.textContent = text;
+  haloUpdatedEl.textContent = updated || DASH;
+}
+
+/* Phase 1: static preview, no API call. */
+renderAll(null);
+setHaloStatus('demo', 'DEMO', 'STATIC PREVIEW');
+
+/* =========================================================
+   LOOP
+   ========================================================= */
+let last = performance.now();
+let hidden = false;
+function frame(now) {
+  if (hidden || !ready) { last = now; requestAnimationFrame(frame); return; }
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; T += dt;
+  drawStage(dt);
+  drawTokenFlow(dt, STATE);
+  requestAnimationFrame(frame);
+}
+let rzT, ready = false, started = false;
+function resizeAll() {
+  const r = stage.getBoundingClientRect();
+  if (r.width < 20 || r.height < 20) { ready = false; return; }
+  DPR = Math.min(window.devicePixelRatio || 1, 1.5); resizeStage(); resizePanels(); ready = true;
+  if (!started) { started = true; last = performance.now(); requestAnimationFrame(frame); }
+}
+document.addEventListener('visibilitychange', () => { hidden = document.hidden; if (!hidden) last = performance.now(); });
+new ResizeObserver(() => { clearTimeout(rzT); rzT = setTimeout(resizeAll, 120); }).observe(document.getElementById('stageWrap'));
+(document.fonts ? document.fonts.ready : Promise.resolve()).then(resizeAll);
+
+// fullscreen: double-click anywhere or press F
+function toggleFS() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(() => {});
+}
+document.addEventListener('dblclick', toggleFS);
+
+
+/* BGM and the hidden tuning console were removed in the Hermes build.
+   The visual parameters above stay as a plain object (C) for future tuning. */
+</script>
+</body>
+</html>
