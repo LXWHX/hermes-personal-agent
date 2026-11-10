@@ -153,6 +153,56 @@ sup { font-size: 0.45em; vertical-align: super; }
 }
 .wordmark__aside .micro { margin-top: 18px; }
 
+/* agent-ops wall launch button — square stamp, ink/ground inversion only */
+.wordmark__right {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+}
+.ops-launch {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 0 0 auto; /* never shrink — the wrapping aside must give way, not the square */
+  width: 104px;
+  height: 104px;
+  margin-bottom: 2px;
+  padding: 10px 10px 9px;
+  background: var(--ink);
+  color: var(--ground);
+  border: 1px solid var(--ink);
+  transition: background var(--fast) steps(2, end), color var(--fast) steps(2, end);
+}
+.ops-launch:hover,
+.ops-launch:focus-visible {
+  background: var(--ground);
+  color: var(--ink);
+}
+.ops-launch__k {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+.ops-launch__k::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 6px;
+  background: currentColor;
+  vertical-align: 1px;
+}
+.ops-launch__t {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.ops-launch__m {
+  font-size: 8px;
+  letter-spacing: 0.14em;
+}
+
 .status-bar {
   display: flex;
   align-items: center;
@@ -1426,8 +1476,15 @@ main { padding: 0 var(--pad); }
   :root { --pad: 16px; }
   .wordmark { flex-direction: column; align-items: flex-start; gap: 12px; }
   .wordmark h1 { font-size: clamp(64px, 22vw, 150px); }
+  .wordmark__right { gap: 14px; }
+  .ops-launch { width: 72px; height: 72px; padding: 7px 7px 6px; }
+  .ops-launch__t { font-size: 18px; }
+  .ops-launch__k { font-size: 8px; letter-spacing: 0.14em; }
+  .ops-launch__m { font-size: 7px; letter-spacing: 0.1em; }
   .wordmark__aside { border-left: 0; padding-left: 0; flex: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; }
   .wordmark__aside .micro { margin-top: 0; }
+  /* inside the row the aside must shrink+wrap so the square keeps its size */
+  .wordmark__right .wordmark__aside { flex: 1 1 auto; min-width: 0; }
   .section-head { grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px 10px; }
   .section-head .section-note { grid-column: 2 / -1; }
   .section-head .stamp { grid-column: 3; grid-row: 1; }
@@ -1514,6 +1571,7 @@ main { padding: 0 var(--pad); }
     animation-delay: calc(0.06s + var(--i, 0) * 55ms);
   }
   html.js-motion .wordmark__aside { animation: fade-up var(--slow) var(--ease-mech) 0.3s both; }
+  html.js-motion .ops-launch { animation: fade-up var(--slow) var(--ease-mech) 0.3s both; }
   html.js-motion .status-bar { animation: wipe-in 0.5s var(--ease-mech) 0.24s both; }
   html.js-motion .index { animation: fade-up 0.4s var(--ease-mech) 0.36s both; }
 
