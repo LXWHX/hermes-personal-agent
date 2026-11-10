@@ -2225,8 +2225,10 @@ function drawActivityHeatmap() {
   x.font = `600 6.5px ${FONT}`; x.textBaseline = 'middle';
   const lx = 26, rx = 30, rows = 7, cols = 24;
   const top = 8, cw = (w - lx - rx) / cols, ch = (h - top) / rows;
-  const scan = Math.floor((T * 5) % cols);
-  const pulse = 0.5 + 0.5 * Math.sin(T * 2.2);
+  /* scan head travels continuously and runs off both edges, so the wrap
+     back to 00 never pops; reduced motion parks it off-canvas */
+  const scan = REDUCE_MOTION ? -10 : ((T * 4.6) % (cols + 2)) - 1;
+  const pulse = REDUCE_MOTION ? 0.5 : 0.5 + 0.5 * Math.sin(T * 2.2);
   [0, 6, 12, 18, 23].forEach(hr => {
     const px = lx + hr * cw + cw / 2;
     x.fillStyle = '#5f646d'; x.textAlign = hr === 23 ? 'right' : 'center';
@@ -2247,17 +2249,37 @@ function drawActivityHeatmap() {
     for (let i = 0; i < cols; i++) {
       const v = HEAT.matrix[j][i];
       const px = lx + i * cw, py = y + 0.5;
-      let col = heatColor(v, HEAT.peak);
-      if (i === scan) col = v == null ? '#191b20' : v > 0 ? '#ffffff' : '#3a3e46';
-      x.fillStyle = col;
-      x.fillRect(px, py, Math.max(0.6, cw - 0.9), Math.max(1, ch - 1.2));
-      if (v != null && v > 0 && v / HEAT.peak > 0.55 && i !== scan) {
+      const cwUse = Math.max(0.6, cw - 0.9), chUse = Math.max(1, ch - 1.2);
+      x.fillStyle = heatColor(v, HEAT.peak);
+      x.fillRect(px, py, cwUse, chUse);
+      if (v != null && v > 0 && v / HEAT.peak > 0.55 && Math.abs(i + 0.5 - scan) > 1.2) {
         x.globalAlpha = 0.06 + 0.16 * pulse;
         x.fillStyle = '#ffffff';
-        x.fillRect(px, py, Math.max(0.6, cw - 0.9), Math.max(1, ch - 1.2));
+        x.fillRect(px, py, cwUse, chUse);
         x.globalAlpha = 1;
       }
     }
+  }
+  /* scan bar: one soft translucent band laid over the finished grid instead
+     of repainting a column flat white — every cell keeps its own hue/value
+     (pinks stay pink, cold greys only lift a little) and the gradient edge
+     reads as motion, not as a stepping block */
+  if (!REDUCE_MOTION) {
+    const scanX = lx + (scan + 0.5) * cw;
+    const reach = cw * 1.5;
+    /* dim the band when the grid is empty, so it never fakes activity */
+    const lit = HEAT.hasData ? 1 : 0.35;
+    const g = x.createLinearGradient(scanX - reach, 0, scanX + reach, 0);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.36, `rgba(255,255,255,${(0.02 * lit).toFixed(3)})`);
+    g.addColorStop(0.5, `rgba(255,255,255,${(0.18 * lit).toFixed(3)})`);
+    g.addColorStop(0.64, `rgba(255,255,255,${(0.02 * lit).toFixed(3)})`);
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    /* additive light, so each cell keeps its hue instead of mixing to grey */
+    x.globalCompositeOperation = 'lighter';
+    x.fillStyle = g;
+    x.fillRect(lx, top + 0.5, cols * cw, rows * ch - 1);
+    x.globalCompositeOperation = 'source-over';
   }
 }
 
