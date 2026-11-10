@@ -1878,13 +1878,14 @@ function buildQuota(state) {
     reset: quotaTime(reset),
     duration,
     history: Array.isArray(series)
-      ? series.map(p => ({ t: quotaTime(p.t), v: quotaNum(p.v) }))
+      ? series.map(p => ({ t: quotaTime(p.t), v: quotaNum(p.v), est: !!p.est }))
         .filter(p => p.t != null && p.v != null)
         .sort((a, b) => a.t - b.t)
       : [],
   }));
   if (quotaCapEl) {
-    quotaCapEl.textContent = `${main?.label ? main.label + ' · ' : ''}used % · click 5h / 7d / 30d · hatch = forecast`;
+    const hasEst = QUOTA.items.some(it => it.history.some(p => p.est));
+    quotaCapEl.textContent = `${main?.label ? main.label + ' · ' : ''}used % · 5h/7d/30d · hatch = forecast${hasEst ? ' · dashed = est' : ''}`;
   }
   // motion triggers: sweep the line in when a window first has data, ping the live point on new samples
   QUOTA.items.forEach(it => {
@@ -2004,29 +2005,60 @@ function drawQuota(dt) {
   const revealing = QUOTA.reveal < 1;
   if (revealing) { x.save(); x.beginPath(); x.rect(lx, 0, Math.max(0, clipX - lx), h); x.clip(); }
 
-  // history line (only real samples; no synthetic backfill)
+  // history line: solid = live API samples, dashed = imported local estimate
   const pts = item.history.filter(p => p.t >= win.start && p.t <= nowMs);
-  let path = null, cum = null, total = 0;
-  if (pts.length) {
-    path = pts.map(p => [xOf(p.t), yOf(p.v)]);
-    if (nowX - path[path.length - 1][0] > 0.5) path.push([nowX, curY]);
-    cum = [0];
+  const draw = pts.map(p => ({ x: xOf(p.t), y: yOf(p.v), est: !!p.est }));
+  if (draw.length && nowX - draw[draw.length - 1].x > 0.5) {
+    draw.push({ x: nowX, y: curY, est: false });
+  }
+  const seg = { est: [], live: [] };
+  draw.forEach((p, i) => {
+    const prev = i ? draw[i - 1] : null;
+    const bucket = p.est ? seg.est : seg.live;
+    if (prev && bucket[bucket.length - 1] !== prev) bucket.push(prev);
+    bucket.push(p);
+  });
+  const toPath = list => {
+    if (list.length < 2) return null;
+    const path = list.map(p => [p.x, p.y]);
+    const cum = [0];
     for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]));
-    total = cum[cum.length - 1];
-    const grad = x.createLinearGradient(lx, 0, Math.max(lx + 1, nowX), 0);
-    grad.addColorStop(0, `rgba(${rgb},.35)`);
-    grad.addColorStop(1, `rgba(${rgb},1)`);
+    return { path, cum, total: cum[cum.length - 1] };
+  };
+  const liveSeg = toPath(seg.live);
+  const estSeg = toPath(seg.est);
+  const collecting = pts.length < 2 || (nowMs - pts[0].t) / span < 0.05;
+  if (draw.length) {
+    const fullPath = draw.map(p => [p.x, p.y]);
     x.lineJoin = 'round'; x.lineCap = 'round';
-    x.strokeStyle = `rgba(${rgb},.14)`; x.lineWidth = 4;
+    x.strokeStyle = `rgba(${rgb},.10)`; x.lineWidth = 4;
     x.beginPath();
-    path.forEach(([px, py], i) => i ? x.lineTo(px, py) : x.moveTo(px, py));
+    fullPath.forEach(([px, py], i) => i ? x.lineTo(px, py) : x.moveTo(px, py));
     x.stroke();
-    x.strokeStyle = grad; x.lineWidth = 1.4;
-    x.beginPath();
-    path.forEach(([px, py], i) => i ? x.lineTo(px, py) : x.moveTo(px, py));
-    x.stroke();
-    // travelling pulse: a bright segment + head dot running along the real samples
-    if (!REDUCE_MOTION && total > 8) {
+    // imported estimate: dashed and dimmer, never mixed with the live line
+    if (estSeg) {
+      x.save();
+      x.setLineDash([2, 3]);
+      x.strokeStyle = `rgba(${rgb},.55)`; x.lineWidth = 1.2;
+      x.beginPath();
+      estSeg.path.forEach(([px, py], i) => i ? x.lineTo(px, py) : x.moveTo(px, py));
+      x.stroke();
+      x.restore();
+    }
+    // live samples: solid, gradient toward the cursor
+    if (liveSeg) {
+      const grad = x.createLinearGradient(lx, 0, Math.max(lx + 1, nowX), 0);
+      grad.addColorStop(0, `rgba(${rgb},.35)`);
+      grad.addColorStop(1, `rgba(${rgb},1)`);
+      x.strokeStyle = grad; x.lineWidth = 1.4;
+      x.beginPath();
+      liveSeg.path.forEach(([px, py], i) => i ? x.lineTo(px, py) : x.moveTo(px, py));
+      x.stroke();
+    }
+    // travelling pulse only on the live portion, so the estimate stays quiet
+    const pulseSeg = liveSeg || estSeg;
+    if (!REDUCE_MOTION && pulseSeg && pulseSeg.total > 8) {
+      const path = pulseSeg.path, cum = pulseSeg.cum, total = pulseSeg.total;
       const dash = Math.max(9, Math.min(30, total * 0.2));
       const head = (T * 40) % (total + dash + 24);
       x.save();
@@ -2054,8 +2086,21 @@ function drawQuota(dt) {
         x.beginPath(); x.arc(hx, hy, 1.5, 0, TAU); x.fill();
       }
     }
+    // show the uncollected gap instead of pretending it is a flat line
+    const gap = (pts[0].t - win.start) / span;
+    if (!collecting && gap > 0.05) {
+      const gx = xOf(pts[0].t);
+      x.fillStyle = 'rgba(255,255,255,.015)';
+      x.fillRect(lx, top, Math.max(0, gx - lx), plotH);
+      x.strokeStyle = 'rgba(255,255,255,.10)';
+      x.setLineDash([2, 3]);
+      x.beginPath(); x.moveTo(gx, top); x.lineTo(gx, top + plotH); x.stroke();
+      x.setLineDash([]);
+      x.fillStyle = '#3f434a';
+      x.fillText('NO LOCAL HISTORY', lx + 2, top + 7);
+    }
   }
-  if (pts.length < 2 || (nowMs - pts[0].t) / span < 0.05) {
+  if (collecting) {
     x.fillStyle = '#3f434a';
     x.fillText('COLLECTING…', lx + 2, top + 7);
   }

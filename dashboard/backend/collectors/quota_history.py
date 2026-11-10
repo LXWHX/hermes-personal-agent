@@ -40,8 +40,14 @@ def _connect() -> sqlite3.Connection | None:
             "CREATE TABLE IF NOT EXISTS samples ("
             "key TEXT NOT NULL, ts INTEGER NOT NULL, "
             "rolling REAL, weekly REAL, monthly REAL, remaining REAL, "
+            "source TEXT NOT NULL DEFAULT 'api', "
             "PRIMARY KEY (key, ts))"
         )
+        cols = {row[1] for row in con.execute("PRAGMA table_info(samples)")}
+        if "source" not in cols:
+            con.execute(
+                "ALTER TABLE samples ADD COLUMN source TEXT NOT NULL DEFAULT 'api'"
+            )
         return con
     except (OSError, sqlite3.Error):
         if con is not None:
@@ -84,15 +90,16 @@ def record(quota: list[dict]) -> None:
         try:
             for key, ts, rolling, weekly, monthly, remaining in rows:
                 last = con.execute(
-                    "SELECT ts FROM samples WHERE key=? ORDER BY ts DESC LIMIT 1",
+                    "SELECT ts FROM samples WHERE key=? AND source='api' "
+                    "ORDER BY ts DESC LIMIT 1",
                     (key,),
                 ).fetchone()
                 if last and ts - int(last[0]) < SAMPLE_SECONDS:
                     continue
                 con.execute(
                     "INSERT OR REPLACE INTO samples"
-                    "(key, ts, rolling, weekly, monthly, remaining) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    "(key, ts, rolling, weekly, monthly, remaining, source) "
+                    "VALUES (?, ?, ?, ?, ?, ?, 'api')",
                     (key, ts, rolling, weekly, monthly, remaining),
                 )
             con.execute("DELETE FROM samples WHERE ts < ?", (stamp - KEEP_DAYS * 86400,))
@@ -108,13 +115,15 @@ def _series(con: sqlite3.Connection, key: str, column: str, since: int,
     """Aggregate samples into fixed time buckets (5m / 1h / 3h)."""
     try:
         rows = con.execute(
-            f"SELECT (ts / ?) * ? AS t, AVG({column}) AS v FROM samples "
-            f"WHERE key=? AND ts>=? AND {column} IS NOT NULL "
+            f"SELECT (ts / ?) * ? AS t, AVG({column}) AS v, "
+            f"MIN(CASE WHEN source='ccswitch' THEN 1 ELSE 0 END) AS est "
+            f"FROM samples WHERE key=? AND ts>=? AND {column} IS NOT NULL "
             f"GROUP BY ts / ? ORDER BY t",
             (bucket, bucket, key, since, bucket),
         ).fetchall()
         last = con.execute(
-            f"SELECT ts, {column} FROM samples WHERE key=? AND {column} IS NOT NULL "
+            f"SELECT ts, {column}, source FROM samples "
+            f"WHERE key=? AND {column} IS NOT NULL "
             "ORDER BY ts DESC LIMIT 1",
             (key,),
         ).fetchone()
@@ -122,10 +131,17 @@ def _series(con: sqlite3.Connection, key: str, column: str, since: int,
         return []
     if not rows:
         return []
-    out = [{"t": int(row[0]), "v": round(float(row[1]), 1)} for row in rows]
+    out = [
+        {"t": int(row[0]), "v": round(float(row[1]), 1), "est": bool(row[2])}
+        for row in rows
+    ]
     # Keep the exact newest sample even when it sits inside the current bucket.
     if last and int(last[0]) > out[-1]["t"]:
-        out.append({"t": int(last[0]), "v": round(float(last[1]), 1)})
+        out.append({
+            "t": int(last[0]),
+            "v": round(float(last[1]), 1),
+            "est": last[2] == "ccswitch",
+        })
     return out
 
 
