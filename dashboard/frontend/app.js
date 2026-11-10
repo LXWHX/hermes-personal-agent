@@ -87,25 +87,26 @@
     if (el) el.style.transform = `scaleX(${Math.max(0, Math.min(1, ratio)).toFixed(4)})`;
   }
 
-  /* the agent-ops stamp answers the wordmark decode: its ink plate recoils,
-     overshoots and settles while the glyphs scramble (560ms CSS timeline) */
-  const OPS_STAMP_MS = 600;
-  let opsStampTimer = 0;
+  /* the agent-ops stamp answers the wordmark decode: the whole stamp —
+     frame, ink plate and label — shrinks, turns a quarter and grows back
+     (620ms CSS timeline) */
+  const OPS_SPIN_MS = 660;
+  let opsSpinTimer = 0;
 
-  function stampOpsLaunch() {
+  function spinOpsLaunch() {
     const btn = $('.ops-launch');
     if (!btn) return;
-    btn.classList.remove('is-decoding');
+    btn.classList.remove('is-spinning');
     void btn.offsetWidth; /* restart the keyframes on repeats */
-    btn.classList.add('is-decoding');
-    clearTimeout(opsStampTimer);
-    opsStampTimer = setTimeout(() => btn.classList.remove('is-decoding'), OPS_STAMP_MS);
+    btn.classList.add('is-spinning');
+    clearTimeout(opsSpinTimer);
+    opsSpinTimer = setTimeout(() => btn.classList.remove('is-spinning'), OPS_SPIN_MS);
   }
 
   function scramble(el) {
     const spans = $$('.wm-l');
     if (!spans.length || el.dataset.scrambling) return;
-    stampOpsLaunch();
+    spinOpsLaunch();
     el.dataset.scrambling = '1';
     let frame = 0;
     const timer = setInterval(() => {
@@ -1775,6 +1776,8 @@
     initCursorTip();
     initSectionMotion();
     if (motionOK) {
+      const opsLaunch = $('.ops-launch');
+      if (opsLaunch && FINE) opsLaunch.addEventListener('mouseenter', spinOpsLaunch);
       const wm = $('.wordmark h1');
       const wmSpans = $$('.wm-l');
       wmSpans.forEach((span) => { span.dataset.ch = span.textContent; });
