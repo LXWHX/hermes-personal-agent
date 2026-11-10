@@ -160,35 +160,41 @@ sup { font-size: 0.45em; vertical-align: super; }
   gap: 16px;
 }
 .ops-launch {
+  position: relative;
   flex: 0 0 auto; /* never shrink — the wrapping aside must give way, not the square */
   width: 104px;
   height: 104px;
   margin-bottom: 2px;
 }
-/* the whole stamp — ink plate, hairline frame and label — moves as one;
-   the wrapper keeps the load fade-up assigned to the anchor untouched */
+/* frame + ink plate spin behind the label; the label itself never turns */
 .ops-launch__stamp {
+  position: absolute;
+  inset: 0;
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  transform-origin: 50% 50%;
+}
+.ops-launch__label {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   width: 100%;
   height: 100%;
   padding: 10px 10px 9px;
-  background: var(--ink);
+  /* white ink + difference keeps the fixed label legible over both the
+     black plate and the white page as the plate turns under it */
   color: var(--ground);
-  border: 1px solid var(--ink);
-  transform-origin: 50% 50%;
-  transition: background var(--fast) steps(2, end), color var(--fast) steps(2, end);
+  mix-blend-mode: difference;
 }
 .ops-launch:hover .ops-launch__stamp,
 .ops-launch:focus-visible .ops-launch__stamp {
   background: var(--ground);
-  color: var(--ink);
 }
 /* press = the stamp slams back to ink for a beat */
 .ops-launch:active .ops-launch__stamp {
   background: var(--ink);
-  color: var(--ground);
 }
 .ops-launch__k {
   font-size: 9px;
@@ -1490,7 +1496,7 @@ main { padding: 0 var(--pad); }
   .wordmark h1 { font-size: clamp(64px, 22vw, 150px); }
   .wordmark__right { gap: 14px; }
   .ops-launch { width: 72px; height: 72px; }
-  .ops-launch__stamp { padding: 7px 7px 6px; }
+  .ops-launch__label { padding: 7px 7px 6px; }
   .ops-launch__t { font-size: 18px; }
   .ops-launch__k { font-size: 8px; letter-spacing: 0.14em; }
   .ops-launch__m { font-size: 7px; letter-spacing: 0.1em; }
@@ -1565,9 +1571,9 @@ main { padding: 0 var(--pad); }
 @keyframes wm-rise { from { opacity: 0; transform: translateY(0.32em); } }
 @keyframes ops-spin {
   0%   { transform: scale(1) rotate(0deg); }
-  34%  { transform: scale(0.9) rotate(90deg); }
-  42%  { transform: scale(0.9) rotate(90deg); }
-  100% { transform: scale(1) rotate(0deg); }
+  22%  { transform: scale(0.86) rotate(0deg); }
+  55%  { transform: scale(0.86) rotate(90deg); }
+  100% { transform: scale(1) rotate(90deg); }
 }
 @keyframes wipe-in { from { clip-path: inset(0 100% 0 0); } }
 @keyframes soft-in { from { opacity: 0; } }
@@ -1591,8 +1597,8 @@ main { padding: 0 var(--pad); }
   }
   html.js-motion .wordmark__aside { animation: fade-up var(--slow) var(--ease-mech) 0.3s both; }
   html.js-motion .ops-launch { animation: fade-up var(--slow) var(--ease-mech) 0.3s both; }
-  /* the whole stamp spins a quarter turn with the wordmark's decode
-     (JS adds .is-spinning; hover on the stamp triggers the same run) */
+  /* the plate + frame turn a quarter and grow back while the label holds
+     still (JS adds .is-spinning; hover on the stamp triggers the same run) */
   html.js-motion .ops-launch.is-spinning .ops-launch__stamp {
     animation: ops-spin 620ms var(--ease-mech) both;
   }

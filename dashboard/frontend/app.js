@@ -87,8 +87,8 @@
     if (el) el.style.transform = `scaleX(${Math.max(0, Math.min(1, ratio)).toFixed(4)})`;
   }
 
-  /* the agent-ops stamp answers the wordmark decode: the whole stamp —
-     frame, ink plate and label — shrinks, turns a quarter and grows back
+  /* the agent-ops plate answers the wordmark decode: the frame + ink plate
+     shrink, turn 90° and grow back while the label stays upright
      (620ms CSS timeline) */
   const OPS_SPIN_MS = 660;
   let opsSpinTimer = 0;
