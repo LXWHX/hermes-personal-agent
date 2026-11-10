@@ -87,11 +87,14 @@
     if (el) el.style.transform = `scaleX(${Math.max(0, Math.min(1, ratio)).toFixed(4)})`;
   }
 
-  /* the agent-ops plate answers the wordmark decode: the frame + ink plate
-     shrink, turn 90° and grow back while the label stays upright
-     (620ms CSS timeline) */
+  /* the agent-ops plate runs on its own loop: after a random 1–2s pause it
+     turns a quarter once or twice; the label stays upright (620ms CSS
+     timeline). Hover only inverts the ink/ground colors — no spin. */
   const OPS_SPIN_MS = 660;
+  const OPS_WAIT_MIN_MS = 1000;
+  const OPS_WAIT_MAX_MS = 2000;
   let opsSpinTimer = 0;
+  let opsSequenceTimer = 0;
 
   function spinOpsLaunch() {
     const btn = $('.ops-launch');
@@ -103,10 +106,26 @@
     opsSpinTimer = setTimeout(() => btn.classList.remove('is-spinning'), OPS_SPIN_MS);
   }
 
+  function scheduleOpsSpin(wait) {
+    clearTimeout(opsSequenceTimer);
+    opsSequenceTimer = setTimeout(() => {
+      if (document.hidden) { scheduleOpsSpin(OPS_WAIT_MIN_MS); return; }
+      runOpsBurst(Math.random() < 0.5 ? 1 : 2);
+    }, wait);
+  }
+
+  function runOpsBurst(runs) {
+    spinOpsLaunch();
+    if (runs > 1) {
+      opsSequenceTimer = setTimeout(() => runOpsBurst(runs - 1), OPS_SPIN_MS + 60);
+    } else {
+      scheduleOpsSpin(OPS_WAIT_MIN_MS + Math.random() * (OPS_WAIT_MAX_MS - OPS_WAIT_MIN_MS));
+    }
+  }
+
   function scramble(el) {
     const spans = $$('.wm-l');
     if (!spans.length || el.dataset.scrambling) return;
-    spinOpsLaunch();
     el.dataset.scrambling = '1';
     let frame = 0;
     const timer = setInterval(() => {
@@ -1776,8 +1795,17 @@
     initCursorTip();
     initSectionMotion();
     if (motionOK) {
-      const opsLaunch = $('.ops-launch');
-      if (opsLaunch && FINE) opsLaunch.addEventListener('mouseenter', spinOpsLaunch);
+      scheduleOpsSpin(OPS_WAIT_MIN_MS + Math.random() * (OPS_WAIT_MAX_MS - OPS_WAIT_MIN_MS));
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          clearTimeout(opsSequenceTimer);
+          clearTimeout(opsSpinTimer);
+          const btn = $('.ops-launch');
+          if (btn) btn.classList.remove('is-spinning');
+        } else {
+          scheduleOpsSpin(OPS_WAIT_MIN_MS);
+        }
+      });
       const wm = $('.wordmark h1');
       const wmSpans = $$('.wm-l');
       wmSpans.forEach((span) => { span.dataset.ch = span.textContent; });

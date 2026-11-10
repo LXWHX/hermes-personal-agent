@@ -1598,7 +1598,7 @@ main { padding: 0 var(--pad); }
   html.js-motion .wordmark__aside { animation: fade-up var(--slow) var(--ease-mech) 0.3s both; }
   html.js-motion .ops-launch { animation: fade-up var(--slow) var(--ease-mech) 0.3s both; }
   /* the plate + frame turn a quarter and grow back while the label holds
-     still (JS adds .is-spinning; hover on the stamp triggers the same run) */
+     still (JS adds .is-spinning on its own 1–2s loop) */
   html.js-motion .ops-launch.is-spinning .ops-launch__stamp {
     animation: ops-spin 620ms var(--ease-mech) both;
   }
