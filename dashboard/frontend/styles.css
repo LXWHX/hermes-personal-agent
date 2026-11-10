@@ -160,6 +160,8 @@ sup { font-size: 0.45em; vertical-align: super; }
   gap: 16px;
 }
 .ops-launch {
+  position: relative;
+  isolation: isolate; /* keeps the negative-z ink plate inside the stamp */
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -168,15 +170,36 @@ sup { font-size: 0.45em; vertical-align: super; }
   height: 104px;
   margin-bottom: 2px;
   padding: 10px 10px 9px;
-  background: var(--ink);
+  background: transparent;
   color: var(--ground);
   border: 1px solid var(--ink);
-  transition: background var(--fast) steps(2, end), color var(--fast) steps(2, end);
+  transition: color var(--fast) steps(2, end);
+}
+/* the ink plate lives on its own layer so the title's decode can jolt it
+   without moving the label; overflow stays inside the hairline frame */
+.ops-launch::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--ink);
+  transform-origin: 50% 50%;
+  transition: background var(--fast) steps(2, end);
 }
 .ops-launch:hover,
 .ops-launch:focus-visible {
-  background: var(--ground);
   color: var(--ink);
+}
+.ops-launch:hover::before,
+.ops-launch:focus-visible::before {
+  background: var(--ground);
+}
+/* press = the stamp slams back to ink for a beat */
+.ops-launch:active {
+  color: var(--ground);
+}
+.ops-launch:active::before {
+  background: var(--ink);
 }
 .ops-launch__k {
   font-size: 9px;
@@ -1550,6 +1573,14 @@ main { padding: 0 var(--pad); }
 
 @keyframes fade-up { from { opacity: 0; transform: translateY(8px); } }
 @keyframes wm-rise { from { opacity: 0; transform: translateY(0.32em); } }
+@keyframes ops-stamp {
+  0%   { transform: scale(1) rotate(0deg); }
+  15%  { transform: scale(0.93) rotate(-3deg); }
+  32%  { transform: scale(0.93) rotate(-3deg); }
+  54%  { transform: scale(1.035) rotate(1.2deg); }
+  76%  { transform: scale(0.99) rotate(-0.35deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
 @keyframes wipe-in { from { clip-path: inset(0 100% 0 0); } }
 @keyframes soft-in { from { opacity: 0; } }
 @keyframes val-flash {
@@ -1572,6 +1603,10 @@ main { padding: 0 var(--pad); }
   }
   html.js-motion .wordmark__aside { animation: fade-up var(--slow) var(--ease-mech) 0.3s both; }
   html.js-motion .ops-launch { animation: fade-up var(--slow) var(--ease-mech) 0.3s both; }
+  /* the stamp jolts with the wordmark's glyph decode (JS adds .is-decoding) */
+  html.js-motion .ops-launch.is-decoding::before {
+    animation: ops-stamp 560ms var(--ease-mech) both;
+  }
   html.js-motion .status-bar { animation: wipe-in 0.5s var(--ease-mech) 0.24s both; }
   html.js-motion .index { animation: fade-up 0.4s var(--ease-mech) 0.36s both; }
 
