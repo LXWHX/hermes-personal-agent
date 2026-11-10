@@ -33,7 +33,6 @@ from __future__ import annotations
 
 import argparse
 import bisect
-import calendar
 import json
 import sqlite3
 import urllib.request
@@ -66,15 +65,6 @@ def _week_start(ts: int) -> int:
         seconds=dt.second, microseconds=dt.microsecond,
     )
     return int(monday.timestamp())
-
-
-def _sub_month(dt: datetime) -> datetime:
-    year, month = dt.year, dt.month - 1
-    if month == 0:
-        year -= 1
-        month = 12
-    day = min(dt.day, calendar.monthrange(year, month)[1])
-    return dt.replace(year=year, month=month, day=day)
 
 
 def _sum_range(ts_list: list[int], prefix: list[float], a: int, b: int) -> float:
@@ -217,6 +207,17 @@ def import_json(args: argparse.Namespace) -> int:
             api_payload = _fetch_api(args.api_url, args.host)
         except Exception as exc:  # best effort; live samples are enough
             print(f"warning: API read failed: {type(exc).__name__}: {exc}")
+    if api_payload and monthly_start:
+        quota = ((api_payload.get("data") or {}).get("usage") or {}).get("quota") or []
+        reset = _iso(((quota[0].get("resets") or {}) if quota else {}).get("monthly"))
+        if reset:
+            expected = reset - timedelta(days=30)
+            if abs((expected - monthly_start).total_seconds()) > 3600:
+                print(
+                    "warning: JSON monthly_start "
+                    f"{monthly_start.isoformat()} != current "
+                    f"{expected.isoformat()}; re-export with the current window"
+                )
 
     if args.all_keys:
         keys = [row[0] for row in con.execute(
