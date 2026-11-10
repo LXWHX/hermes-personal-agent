@@ -26,7 +26,7 @@ import demo
 import log as dlog
 from cache import CACHE
 from collectors import (activity, board, drift, errors, events, halo, jobs, outputs,
-                        overview, services, system, usage)
+                        overview, quota_history, services, system, usage)
 from util import DEMO, ROOT, envelope, iso, redact, tail, viewer_for
 
 FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
@@ -188,6 +188,18 @@ def _usage(include_quota: bool = True) -> dict:
     if include_quota:
         return CACHE.get("usage", 60, usage.collect)
     return CACHE.get("usage:profiles", 45, lambda: usage.collect(False))
+
+
+def _halo_usage() -> dict:
+    """Usage + compact quota history; only the wall needs the series."""
+    if DEMO:
+        return demo.snapshot()["usage"]
+    try:
+        return quota_history.attach(_usage())
+    except Exception as exc:  # history must never break the aggregate
+        dlog.error(f"quota history attach failed: {type(exc).__name__}: {exc}",
+                   throttle_key="quota:history")
+        return _usage()
 
 
 def _drift() -> dict:
@@ -468,7 +480,7 @@ def _halo_data(viewer: str) -> dict:
             "jobs": pool.submit(_jobs),
             "activity": pool.submit(_activity, "7d"),
             "activity_today": pool.submit(_activity, "24h"),
-            "usage": pool.submit(_usage),
+            "usage": pool.submit(_halo_usage),
             "outputs": pool.submit(_outputs),
         }
         if viewer != "guest":
@@ -527,13 +539,29 @@ def _warm_caches() -> None:
             ]
             for future in futures:
                 future.result()
+        # Seed the quota history immediately instead of waiting for the first
+        # halo request (the warmup usage call is now cached).
+        quota_history.record((_usage().get("quota") or []))
     except Exception:
         dlog.exception("启动预热失败")
+
+
+def _quota_sampler() -> None:
+    """Keep a real quota history even when nobody has the wall open."""
+    while True:
+        time.sleep(quota_history.SAMPLE_SECONDS)
+        if DEMO:
+            continue
+        try:
+            quota_history.record((_usage().get("quota") or []))
+        except Exception:
+            dlog.exception("quota history sampler failed")
 
 
 @app.on_event("startup")
 def _startup_warmup() -> None:
     threading.Thread(target=_warm_caches, name="warm-caches", daemon=True).start()
+    threading.Thread(target=_quota_sampler, name="quota-history", daemon=True).start()
 
 
 if FRONTEND.is_dir():

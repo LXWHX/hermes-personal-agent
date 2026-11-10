@@ -208,7 +208,7 @@ header{display:block;border-bottom:1px solid var(--line);padding:8px 18px 0;back
     <div class="p"><h3>EXEC LOG</h3><div class="code" id="code"></div></div>
     <div class="p"><h3>SERVICE UPTIME</h3><canvas id="cDiff"></canvas><div class="cap">last 24h · 30min segments</div></div>
     <div class="p"><h3>DELIVERY ROUTES</h3><div class="routes" id="routes"></div><div class="cap">sentinel → channel · success / failed</div></div>
-    <div class="p"><h3>QUOTA WINDOWS</h3><canvas id="cVal"></canvas><div class="cap">rolling / weekly / monthly · remaining</div></div>
+    <div class="p"><h3>QUOTA WINDOWS</h3><canvas id="cVal" title="Click 5H / 7D / 30D to switch"></canvas><div class="cap" id="quotaCap">used % · click 5h / 7d / 30d · hatch = forecast</div></div>
     <div class="p"><h3>UNITS / DISPATCH</h3><div class="agents" id="agents"></div><div class="cap">6 services · 3 roles · 3 channels</div></div>
     <div class="p"><h3>ACTIVITY HEATMAP</h3><canvas id="cIdx"></canvas><div class="cap">7 days × 24 hours · messages</div></div>
   </section>
@@ -227,6 +227,7 @@ const pick = a => a[(rnd() * a.length) | 0];
 const gauss = () => (rnd() + rnd() + rnd() - 1.5) / 1.5;
 let DPR = Math.min(window.devicePixelRatio || 1, 1.5);
 const FONT = 'ui-monospace,"Cascadia Mono","SF Mono",Consolas,"Liberation Mono",monospace';
+const REDUCE_MOTION = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
 function mk(w, h) {
   const c = document.createElement('canvas');
@@ -1307,7 +1308,6 @@ const FETCH_TIMEOUT_MS = 8000;
 const DEMO_PARAM = new URLSearchParams(location.search).get('demo') === '1';
 const HALO_URL = DEMO_PARAM ? `${HALO_API}?demo=1` : HALO_API;
 let STATE = null;
-const HISTORY = { quota: [[], [], []], activity: [] };
 let pollTimer = null;
 let fetching = false;
 let lastOkClock = DASH;
@@ -1321,6 +1321,7 @@ const agEl = document.getElementById('agents');
 const tokInEl = document.getElementById('tokIn');
 const tokOutEl = document.getElementById('tokOut');
 const tokAllEl = document.getElementById('tokAll');
+const quotaCapEl = document.getElementById('quotaCap');
 const stBigEl = document.getElementById('stBig');
 const haloStateEl = document.getElementById('haloState');
 const haloStateTextEl = document.getElementById('haloStateText');
@@ -1571,8 +1572,41 @@ function buildUnitRows(state) {
   while (rows.length < 12) rows.push({ id: String(rows.length + 1).padStart(2, '0'), label: DASH, cells: [CELL.none, CELL.none, CELL.none, CELL.none, CELL.none, CELL.none], status: DASH, cls: '' });
   return rows.slice(0, 12);
 }
+/* dispatch rows: progressive sweep like the original agents panel, data colours preserved */
+const UNIT_ANIM = Array.from({ length: 12 }, () => ({ p: rr(0, 8.2), sp: rr(0.65, 1.7) }));
+const UNIT_DIM = new Map([
+  [CELL.on, '#2a2d33'],
+  [CELL.off, '#16181c'],
+  [CELL.err, 'rgba(240,166,198,.22)'],
+  [CELL.mid, '#23262b'],
+  [CELL.none, '#16181c'],
+]);
+let UNIT_DOM = [];
 function renderUnits(state) {
-  agEl.innerHTML = buildUnitRows(state).map(r => unitRowHtml(r.id, r.label, r.cells, r.status, r.cls)).join('');
+  const rows = buildUnitRows(state);
+  agEl.innerHTML = rows.map(r => unitRowHtml(r.id, r.label, r.cells, r.status, r.cls)).join('');
+  UNIT_DOM = [...agEl.children].map((el, i) => ({
+    cells: [...el.querySelector('.cells').children],
+    base: rows[i].cells,
+  }));
+  animateUnits(0);
+}
+function animateUnits(dt) {
+  for (let i = 0; i < UNIT_DOM.length; i++) {
+    const d = UNIT_DOM[i], a = UNIT_ANIM[i];
+    if (!a) continue;
+    a.p += a.sp * dt;
+    if (a.p > 8.2) { a.p = 0; a.sp = rr(0.65, 1.7); }
+    const done = Math.floor(a.p);
+    for (let k = 0; k < 6; k++) {
+      const base = d.base[k];
+      const bg = k < done ? base
+        : k === done ? (base === CELL.err ? '#f0a6c6' : '#5a5e66')
+        : (UNIT_DIM.get(base) || '#1d1f24');
+      const cell = d.cells[k];
+      if (cell._bg !== bg) { cell.style.background = bg; cell._bg = bg; }
+    }
+  }
 }
 
 /* ---------- token stats ---------- */
@@ -1615,25 +1649,36 @@ function buildChecks(state) {
 
 /* ---------- canvases ---------- */
 const cAdv = document.getElementById('cAdv'), cDiff = document.getElementById('cDiff'), cVal = document.getElementById('cVal'), cIdx = document.getElementById('cIdx');
+function quotaTabHit(ev) {
+  if (!QUOTA.tabs.length) return null;
+  const r = cVal.getBoundingClientRect();
+  const mx = ev.clientX - r.left, my = ev.clientY - r.top;
+  return QUOTA.tabs.find(t => mx >= t.x0 && mx <= t.x1 && my >= t.y0 && my <= t.y1) || null;
+}
+cVal.addEventListener('click', ev => {
+  const tab = quotaTabHit(ev);
+  if (tab && tab.key !== QUOTA.active) { QUOTA.active = tab.key; QUOTA.reveal = 0; QUOTA.ping = 0; }
+});
+cVal.addEventListener('mousemove', ev => {
+  cVal.style.cursor = quotaTabHit(ev) ? 'pointer' : 'default';
+});
+cVal.addEventListener('mouseleave', () => { cVal.style.cursor = 'default'; });
 let advP = [];
 function resizePanels() {
   [cAdv, cDiff, cVal, cIdx].forEach(fit);
   advP = Array.from({ length: 320 }, () => ({ x: rnd() * cAdv.w, y: rnd() * cAdv.h, l: rnd() * 3 }));
-  paintStaticPanels();
-}
-function paintStaticPanels() {
-  if (!cDiff.x || !cVal.x || !cIdx.x) return;
-  drawServiceUptime(STATE);
-  drawQuota(STATE, HISTORY.quota);
-  drawActivityHeatmap(STATE);
+  // uptime histogram buffers snap to target on resize
+  UPTIME.hist = UPTIME.histTarget.slice();
+  UPTIME.known = UPTIME.knownTarget.slice();
 }
 let T = 0;
 const flow = (x, y) => Math.sin(x * 0.035 + T * 0.6) * Math.cos(y * 0.05 - T * 0.4) * Math.PI + Math.sin((x + y) * 0.01 + T * 0.2);
 function drawTokenFlow(dt, state) {
   const x = cAdv.x, w = cAdv.w, h = cAdv.h;
   const tokens = state?.summary?.tokens_today;
-  const level = tokens == null ? 0.22 : Math.min(1, 0.28 + Math.log10(Number(tokens) + 1) / 7);
-  const speed = 16 + level * 34;
+  const tokenNum = Number(tokens);
+  const level = tokens == null || !Number.isFinite(tokenNum) ? 0.22 : Math.min(1, 0.28 + Math.log10(tokenNum + 1) / 7);
+  const speed = 9 + level * 13;
   x.fillStyle = 'rgba(14,15,18,0.22)'; x.fillRect(0, 0, w, h);
   x.fillStyle = 'rgba(120,125,135,.22)';
   for (let i = 6; i < w; i += 12) for (let j = 6; j < h; j += 12) x.fillRect(i, j, 1, 1);
@@ -1649,95 +1694,447 @@ function drawTokenFlow(dt, state) {
   x.stroke();
 }
 
-function drawServiceUptime(state) {
-  const x = cDiff.x, w = cDiff.w, h = cDiff.h;
-  x.clearRect(0, 0, w, h);
-  x.font = `600 6.5px ${FONT}`; x.textBaseline = 'middle';
-  const lx = 46, top = 8, cols = 48;
-  const gridH = h * 0.68;
-  const rh = (gridH - top) / 6;
-  const cw = Math.max(1, (w - lx - 2) / cols);
+/* uptime: 6 units x 48 half-hour segments, plus a per-segment uptime histogram */
+const UPTIME = {
+  rows: [],
+  hist: new Array(48).fill(0),
+  histTarget: new Array(48).fill(0),
+  known: new Array(48).fill(0),
+  knownTarget: new Array(48).fill(0),
+};
+function buildUptime(state) {
   const units = (state?.services || []).slice(0, 6);
-  x.fillStyle = '#5f646d'; x.fillText('24H', lx, 3);
-  x.fillText('DOWN', w - 24, 3);
+  const hist = new Array(48).fill(0);
+  const known = new Array(48).fill(0);
+  const rows = [];
   for (let j = 0; j < 6; j++) {
     const unit = units[j];
-    const label = unit ? (SVC_SHORT[unit.unit] || unit.label || unit.unit) : DASH;
-    x.fillStyle = '#6b6f78'; x.fillText(label, 0, top + j * rh + rh / 2);
-    const segs = unit?.segments || [];
-    for (let i = 0; i < cols; i++) {
-      const seg = segs[i];
-      let col = '#15171b';
-      if (seg) col = seg.up ? (unit.state === 'active' ? '#b9bcc4' : '#5a5e66') : '#f0a6c6';
-      x.fillStyle = col;
-      x.fillRect(lx + i * cw, top + j * rh + 0.4, Math.max(0.6, cw - 0.7), Math.max(1, rh - 1.2));
-    }
+    const segs = (unit?.segments || []).slice(-48);
+    const arr = new Array(48).fill(null);
+    const off = 48 - segs.length;
+    segs.forEach((seg, i) => {
+      arr[off + i] = seg;
+      if (seg) {
+        known[off + i] += 1;
+        if (!seg.up) hist[off + i] += 1;
+      }
+    });
+    let seen = 0, up = 0;
+    arr.forEach(seg => { if (seg) { seen++; if (seg.up) up++; } });
+    rows.push({
+      label: unit ? (SVC_SHORT[unit.unit] || unit.label || unit.unit || DASH) : DASH,
+      active: unit ? unit.state === 'active' : false,
+      segs: arr,
+      uptime: seen ? (up / seen) * 100 : null,
+      down: seen - up,
+    });
   }
-  const by = top + 6 * rh + 3, bh = Math.max(2, h - by);
-  x.fillStyle = '#5f646d'; x.fillText('DOWNTIME', 0, by + 2);
-  const bw = Math.min(10, (w - lx) / 6 - 3);
-  for (let j = 0; j < 6; j++) {
-    const unit = units[j];
-    const segs = unit?.segments || [];
-    const down = segs.length ? segs.filter(s => !s.up).length : 0;
-    const bh2 = segs.length ? Math.max(1, (down / 48) * (bh - 4)) : 0;
-    x.fillStyle = down ? '#f0a6c6' : '#2b2e34';
-    x.fillRect(lx + j * ((w - lx) / 6) + bw / 2, by + bh - bh2, bw, Math.max(1, bh2));
+  UPTIME.rows = rows;
+  UPTIME.histTarget = hist;
+  UPTIME.knownTarget = known;
+  if (UPTIME.hist.length !== 48) {
+    UPTIME.hist = hist.slice();
+    UPTIME.known = known.slice();
   }
 }
 
-function ditherLine(x, x0, x1, y, w) {
-  x.strokeStyle = '#1f2227'; x.lineWidth = 1; x.setLineDash([2, 3]);
-  x.beginPath(); x.moveTo(x0, y); x.lineTo(x1, y); x.stroke(); x.setLineDash([]);
+function drawServiceUptime(dt) {
+  if (!cDiff.x || !cDiff.w) return;
+  const x = cDiff.x, w = cDiff.w, h = cDiff.h;
+  x.clearRect(0, 0, w, h);
+  const lx = 46, rx = 32, top = 9, cols = 48, rows = 6;
+  const gridH = h * 0.66;
+  const rh = (gridH - top) / rows;
+  const cw = Math.max(0.8, (w - lx - rx) / cols);
+  x.font = `600 6.5px ${FONT}`; x.textBaseline = 'middle';
+  x.fillStyle = '#5f646d';
+  x.fillText('24H', lx, 4);
+  x.textAlign = 'right';
+  x.fillText('NOW', w - rx, 4);
+  x.fillText('UPTIME', w, 4);
+  x.textAlign = 'left';
+
+  for (let j = 0; j < rows; j++) {
+    const row = UPTIME.rows[j];
+    const y = top + j * rh;
+    const yc = y + rh / 2;
+    x.fillStyle = row && row.down > 0 ? '#d9a9bb' : '#6b6f78';
+    x.fillText(row ? row.label : DASH, 0, yc);
+    if (row && row.uptime != null) {
+      x.fillStyle = row.down > 0 ? '#f0a6c6' : '#8a8e97';
+      x.textAlign = 'right';
+      const pct = row.down > 0 ? `${Math.min(99.9, Math.round(row.uptime * 10) / 10)}%` : '100%';
+      x.fillText(pct, w, yc);
+      x.textAlign = 'left';
+    } else {
+      x.fillStyle = '#3f434a';
+      x.textAlign = 'right'; x.fillText(DASH, w, yc); x.textAlign = 'left';
+    }
+    if (!row) continue;
+    for (let i = 0; i < cols; i++) {
+      const seg = row.segs[i];
+      let col;
+      if (!seg) col = '#131519';
+      else if (!seg.up) {
+        const a = 0.55 + 0.3 * (0.5 + 0.5 * Math.sin(T * 2.4 + j * 0.9 + i * 0.15));
+        col = `rgba(240,166,198,${a.toFixed(3)})`;
+      } else {
+        const sh = 0.5 + 0.25 * Math.sin(i * 0.45 + T * 0.8) * Math.cos(j * 0.5 - T * 0.5) + 0.2 * Math.sin((i + j) * 0.3 + T);
+        const g = Math.round(clamp(86 + sh * 105, 64, 196));
+        col = row.active ? `rgb(${g},${g},${g + 4})` : `rgb(${Math.round(g * 0.62)},${Math.round(g * 0.62)},${Math.round(g * 0.62 + 4)})`;
+      }
+      x.fillStyle = col;
+      x.fillRect(lx + i * cw, y + 0.5, Math.max(0.6, cw - 0.8), Math.max(1, rh - 1));
+    }
+  }
+
+  // uptime histogram, one bar per 30min segment: grey = units up, pink = units down
+  const by = gridH + 6;
+  const bh = Math.max(3, h - by - 1);
+  x.fillStyle = 'rgba(255,255,255,.05)';
+  x.fillRect(lx, by - 3, w - lx - rx, 1);
+  x.fillStyle = '#5f646d'; x.fillText('UP / 24H', 0, by + 3);
+  const bw = (w - lx - rx) / cols;
+  x.fillStyle = '#262a30';
+  x.fillRect(lx, h - 1, w - lx - rx, 1);
+  const ease = Math.min(1, dt * 6);
+  for (let i = 0; i < cols; i++) {
+    UPTIME.hist[i] += (UPTIME.histTarget[i] - UPTIME.hist[i]) * ease;
+    UPTIME.known[i] += (UPTIME.knownTarget[i] - UPTIME.known[i]) * ease;
+  }
+  for (let i = 0; i < cols; i++) {
+    const known = UPTIME.known[i] || 0;
+    const down = UPTIME.hist[i] || 0;
+    const up = Math.max(0, known - down);
+    const full = bh - 4;
+    const totalH = (known / rows) * full;
+    const upH = (up / rows) * full;
+    const downH = Math.max(0, totalH - upH);
+    if (totalH < 0.6) {
+      x.fillStyle = '#1c1f24';
+      x.fillRect(lx + i * bw, h - 3, Math.max(0.6, bw - 0.7), 2);
+      continue;
+    }
+    x.fillStyle = '#4a4e56';
+    x.fillRect(lx + i * bw, h - 1 - upH, Math.max(0.6, bw - 0.7), upH);
+    if (downH > 0.4) {
+      x.fillStyle = 'rgba(240,166,198,.78)';
+      x.fillRect(lx + i * bw, h - 1 - totalH, Math.max(0.6, bw - 0.7), downH);
+    }
+  }
+  // right-edge "now" marker, soft pulse only (the heatmap owns the sweeping scan)
+  x.fillStyle = `rgba(240,166,198,${(0.16 + 0.1 * (0.5 + 0.5 * Math.sin(T * 2))).toFixed(3)})`;
+  x.fillRect(lx + cols * cw, top, 1, h - top - 1);
 }
-function drawQuota(state, history) {
+
+/* quota: real time-series chart with window tabs + forecast */
+const QUOTA = {
+  items: [],
+  active: 'monthly',
+  tabs: [],
+  reveal: 1,
+  ping: 0,
+  seen: new Map(),
+};
+const QUOTA_FMT = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+});
+const QUOTA_LABELS = new Map();
+function quotaTime(v) {
+  if (v == null) return null;
+  if (typeof v === 'number') return v < 1e12 ? v * 1000 : v;
+  const t = Date.parse(String(v));
+  return Number.isFinite(t) ? t : null;
+}
+function quotaNum(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : null;
+}
+function quotaDate(ms, key) {
+  const bucket = key === 'rolling' ? Math.floor(ms / 60000) : Math.floor(ms / 3600000);
+  const ck = `${key}:${bucket}`;
+  const cached = QUOTA_LABELS.get(ck);
+  if (cached) return cached;
+  const parts = QUOTA_FMT.formatToParts(new Date(ms));
+  const get = type => (parts.find(p => p.type === type) || {}).value || '';
+  const text = key === 'rolling' ? `${get('hour')}:${get('minute')}` : `${get('month')}-${get('day')}`;
+  if (QUOTA_LABELS.size > 240) QUOTA_LABELS.clear();
+  QUOTA_LABELS.set(ck, text);
+  return text;
+}
+function buildQuota(state) {
+  const main = (state?.usage?.quota || []).find(q => q.available) || null;
+  const resets = main?.resets || {};
+  const history = main?.history || {};
+  const defs = [
+    ['rolling', '5H', main?.rolling, resets.rolling, 5 * 3600, history.rolling],
+    ['weekly', '7D', main?.weekly, resets.weekly, 7 * 86400, history.weekly],
+    ['monthly', '30D', main?.monthly, resets.monthly || main?.resets_at, 30 * 86400, history.monthly],
+  ];
+  QUOTA.items = defs.map(([key, label, used, reset, duration, series]) => ({
+    key, label,
+    used: quotaNum(used),
+    reset: quotaTime(reset),
+    duration,
+    history: Array.isArray(series)
+      ? series.map(p => ({ t: quotaTime(p.t), v: quotaNum(p.v) }))
+        .filter(p => p.t != null && p.v != null)
+        .sort((a, b) => a.t - b.t)
+      : [],
+  }));
+  if (quotaCapEl) {
+    quotaCapEl.textContent = `${main?.label ? main.label + ' · ' : ''}used % · click 5h / 7d / 30d · hatch = forecast`;
+  }
+  // motion triggers: sweep the line in when a window first has data, ping the live point on new samples
+  QUOTA.items.forEach(it => {
+    const last = it.history.length ? it.history[it.history.length - 1].t : null;
+    if (last == null) return;
+    const prev = QUOTA.seen.get(it.key);
+    if (prev == null) { if (it.key === QUOTA.active) QUOTA.reveal = 0; }
+    else if (last > prev && it.key === QUOTA.active) QUOTA.ping = 1;
+    QUOTA.seen.set(it.key, last);
+  });
+}
+function quotaWindow(item, nowMs) {
+  const span = item.duration * 1000;
+  const known = !!(item.reset && item.reset > nowMs && item.reset - nowMs <= span * 1.2);
+  const end = known ? item.reset : nowMs + span;
+  return { start: end - span, end, known };
+}
+function quotaForecast(item, win, nowMs) {
+  if (item.used == null || !win.known) return null;
+  const total = Math.max(1, win.end - win.start);
+  const frac = Math.max(0.02, Math.min(1, (nowMs - win.start) / total));
+  const pace = item.used / frac;
+  return { pace, value: Math.min(100, pace), over: pace > 100 };
+}
+function quotaPointAt(path, cum, d) {
+  if (path.length < 2) return path[0];
+  let i = 1;
+  while (i < cum.length - 1 && cum[i] < d) i++;
+  const seg = cum[i] - cum[i - 1] || 1;
+  const f = clamp((d - cum[i - 1]) / seg, 0, 1);
+  return [path[i - 1][0] + (path[i][0] - path[i - 1][0]) * f, path[i - 1][1] + (path[i][1] - path[i - 1][1]) * f];
+}
+function drawQuota(dt) {
+  if (!cVal.x || !cVal.w) return;
   const x = cVal.x, w = cVal.w, h = cVal.h;
   x.clearRect(0, 0, w, h);
   x.font = `600 6.5px ${FONT}`; x.textBaseline = 'middle';
-  const lw = 48, rw = 28, names = ['ROLLING', 'WEEKLY', 'MONTHLY'];
-  const quota = (state?.usage?.quota || []).filter(q => q.available);
-  const main = quota[0] || null;
-  const vals = main ? [main.rolling, main.weekly, main.monthly] : [null, null, null];
-  const rh = h / 3;
-  for (let k = 0; k < 3; k++) {
-    const yc = rh * k + rh / 2;
-    const raw = vals[k];
-    const left = raw == null ? null : Math.max(0, Math.min(100, 100 - Number(raw)));
-    x.fillStyle = '#8a8e97'; x.fillText(names[k], 0, yc);
-    ditherLine(x, lw, w - rw, yc, 1);
-    if (left != null) {
-      const hist = history[k];
-      if (!hist.length) {
-        x.fillStyle = '#f0a6c6'; x.beginPath(); x.arc(w - rw, yc - (left - 50) * rh * 0.006, 1.8, 0, TAU); x.fill();
-      } else {
-        x.strokeStyle = k === 0 ? '#f0a6c6' : '#cfd2d8'; x.lineWidth = 1.2;
-        x.beginPath();
-        const n = hist.length, step = Math.min(3, (w - lw - rw) / Math.max(1, n));
-        hist.forEach((v, i) => {
-          const px = w - rw - (n - 1 - i) * step;
-          const py = yc - (v - 50) * rh * 0.006;
-          i ? x.lineTo(px, py) : x.moveTo(px, py);
-        });
-        x.stroke();
-        x.fillStyle = k === 0 ? '#f0a6c6' : '#cfd2d8'; x.beginPath(); x.arc(w - rw, yc - (left - 50) * rh * 0.006, 1.6, 0, TAU); x.fill();
+  const lx = 22, rx = 6, top = 22, bottom = 15;
+  const plotW = w - lx - rx, plotH = h - top - bottom;
+  if (plotW < 20 || plotH < 10) return;
+  const nowMs = Date.now();
+  const yOf = v => top + plotH - (clamp(v, 0, 100) / 100) * plotH;
+
+  // tabs: 5H / 7D / 30D
+  let tx = 0;
+  QUOTA.tabs = [];
+  QUOTA.items.forEach(it => {
+    const text = `${it.label} ${it.used == null ? DASH : Math.round(it.used) + '%'}`;
+    const tw = x.measureText(text).width + 10;
+    const active = it.key === QUOTA.active;
+    x.fillStyle = active ? '#e6e8ec' : '#5f646d';
+    x.fillText(text, tx + 4, 8);
+    if (active) {
+      x.fillStyle = '#f0a6c6';
+      x.fillRect(tx + 4, 15, Math.max(8, tw - 8), 1);
+    }
+    QUOTA.tabs.push({ key: it.key, x0: tx, x1: tx + tw, y0: 0, y1: 22 });
+    tx += tw + 6;
+  });
+
+  const item = QUOTA.items.find(it => it.key === QUOTA.active) || QUOTA.items[2] || null;
+  const win = item ? quotaWindow(item, nowMs) : null;
+  const fc = item && win ? quotaForecast(item, win, nowMs) : null;
+
+  // reset + forecast labels, top-right
+  if (item && win) {
+    x.textAlign = 'right';
+    x.fillStyle = '#5f646d';
+    x.fillText(win.known ? `ENDS ${quotaDate(win.end, item.key)}` : 'NO RESET', w, 8);
+    if (fc) {
+      x.fillStyle = (fc.over || fc.value >= 80) ? '#f0a6c6' : '#8a8e97';
+      x.fillText(`ON PACE ${fc.over ? '>100' : Math.round(fc.value)}%`, w, 18);
+    }
+    x.textAlign = 'left';
+  }
+
+  // gridlines
+  [0, 50, 100].forEach(v => {
+    const y = yOf(v);
+    x.strokeStyle = v === 100 ? 'rgba(240,166,198,.22)' : 'rgba(255,255,255,.07)';
+    x.setLineDash(v === 100 ? [2, 3] : []);
+    x.beginPath(); x.moveTo(lx, y); x.lineTo(w - rx, y); x.stroke();
+    x.setLineDash([]);
+    x.fillStyle = '#5f646d'; x.textAlign = 'right';
+    x.fillText(`${v}%`, lx - 4, y); x.textAlign = 'left';
+  });
+  x.fillStyle = 'rgba(255,255,255,.012)';
+  x.fillRect(lx, top, plotW, plotH);
+  x.strokeStyle = '#262a30';
+  x.beginPath(); x.moveTo(lx, top + plotH + 2); x.lineTo(w - rx, top + plotH + 2); x.stroke();
+
+  if (!item || item.used == null || !win) {
+    x.fillStyle = '#3f434a'; x.textAlign = 'center';
+    x.fillText('NO QUOTA DATA', lx + plotW / 2, top + plotH / 2);
+    x.textAlign = 'left';
+    return;
+  }
+
+  const span = Math.max(1, win.end - win.start);
+  const xOf = t => lx + clamp((t - win.start) / span, 0, 1) * plotW;
+  const nowX = xOf(nowMs);
+  const curY = yOf(item.used);
+  const rgb = item.used >= 80 ? '240,166,198' : '152,224,207';
+  const fcRGB = fc && (fc.over || fc.value >= 80) ? '240,166,198' : rgb;
+
+  x.fillStyle = '#5f646d';
+  x.fillText(quotaDate(win.start, item.key), lx, h - 6);
+  x.textAlign = 'right';
+  x.fillText(win.known ? quotaDate(win.end, item.key) : 'NOW', w - rx, h - 6);
+  x.textAlign = 'left';
+
+  // motion state: 0.55s ease-out sweep on tab switch / first data, 1.1s ping on a fresh sample
+  if (QUOTA.reveal < 1) QUOTA.reveal = REDUCE_MOTION ? 1 : Math.min(1, QUOTA.reveal + dt / 0.55);
+  if (QUOTA.ping > 0) QUOTA.ping = REDUCE_MOTION ? 0 : Math.max(0, QUOTA.ping - dt / 1.1);
+  const ease = 1 - Math.pow(1 - QUOTA.reveal, 3);
+  const clipX = lx + plotW * ease;
+  const revealing = QUOTA.reveal < 1;
+  if (revealing) { x.save(); x.beginPath(); x.rect(lx, 0, Math.max(0, clipX - lx), h); x.clip(); }
+
+  // history line (only real samples; no synthetic backfill)
+  const pts = item.history.filter(p => p.t >= win.start && p.t <= nowMs);
+  let path = null, cum = null, total = 0;
+  if (pts.length) {
+    path = pts.map(p => [xOf(p.t), yOf(p.v)]);
+    if (nowX - path[path.length - 1][0] > 0.5) path.push([nowX, curY]);
+    cum = [0];
+    for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]));
+    total = cum[cum.length - 1];
+    const grad = x.createLinearGradient(lx, 0, Math.max(lx + 1, nowX), 0);
+    grad.addColorStop(0, `rgba(${rgb},.35)`);
+    grad.addColorStop(1, `rgba(${rgb},1)`);
+    x.lineJoin = 'round'; x.lineCap = 'round';
+    x.strokeStyle = `rgba(${rgb},.14)`; x.lineWidth = 4;
+    x.beginPath();
+    path.forEach(([px, py], i) => i ? x.lineTo(px, py) : x.moveTo(px, py));
+    x.stroke();
+    x.strokeStyle = grad; x.lineWidth = 1.4;
+    x.beginPath();
+    path.forEach(([px, py], i) => i ? x.lineTo(px, py) : x.moveTo(px, py));
+    x.stroke();
+    // travelling pulse: a bright segment + head dot running along the real samples
+    if (!REDUCE_MOTION && total > 8) {
+      const dash = Math.max(9, Math.min(30, total * 0.2));
+      const head = (T * 40) % (total + dash + 24);
+      x.save();
+      x.setLineDash([dash, total + 1]);
+      x.lineDashOffset = -head;
+      x.strokeStyle = `rgba(${rgb},.22)`; x.lineWidth = 3.4;
+      x.beginPath();
+      path.forEach(([px, py], i) => i ? x.lineTo(px, py) : x.moveTo(px, py));
+      x.stroke();
+      x.strokeStyle = `rgba(${rgb},.9)`; x.lineWidth = 1.5;
+      x.beginPath();
+      path.forEach(([px, py], i) => i ? x.lineTo(px, py) : x.moveTo(px, py));
+      x.stroke();
+      x.restore();
+      const lead = head + dash;
+      if (lead < total) {
+        const [hx, hy] = quotaPointAt(path, cum, lead);
+        const fade = Math.min(1, (total - lead) / 10);
+        const hg = x.createRadialGradient(hx, hy, 0, hx, hy, 7);
+        hg.addColorStop(0, `rgba(${rgb},${(0.5 * fade).toFixed(3)})`);
+        hg.addColorStop(1, `rgba(${rgb},0)`);
+        x.fillStyle = hg;
+        x.beginPath(); x.arc(hx, hy, 7, 0, TAU); x.fill();
+        x.fillStyle = `rgba(${rgb},${(0.95 * fade).toFixed(3)})`;
+        x.beginPath(); x.arc(hx, hy, 1.5, 0, TAU); x.fill();
       }
-      x.fillStyle = '#cfd2d8'; x.textAlign = 'right';
-      x.fillText(`${Math.round(left)}%`, w, yc); x.textAlign = 'left';
-    } else {
-      x.fillStyle = '#3f434a'; x.textAlign = 'right'; x.fillText(DASH, w, yc); x.textAlign = 'left';
     }
   }
-  if (main) {
-    x.fillStyle = '#5f646d'; x.fillText(main.label || '', lw, 4);
+  if (pts.length < 2 || (nowMs - pts[0].t) / span < 0.05) {
+    x.fillStyle = '#3f434a';
+    x.fillText('COLLECTING…', lx + 2, top + 7);
+  }
+
+  // forecast: hatched area + dashed line to the reset point (dashes march toward reset)
+  if (fc) {
+    const endX = w - rx;
+    const endY = yOf(fc.value);
+    x.save();
+    x.beginPath();
+    x.moveTo(nowX, curY);
+    x.lineTo(endX, endY);
+    x.lineTo(endX, yOf(0));
+    x.lineTo(nowX, yOf(0));
+    x.closePath();
+    x.clip();
+    x.fillStyle = `rgba(${fcRGB},.05)`;
+    x.fillRect(nowX, top, Math.max(0, endX - nowX), plotH);
+    x.strokeStyle = `rgba(${fcRGB},.16)`; x.lineWidth = 1;
+    for (let d = -plotH; d < (endX - nowX) + plotH; d += 6) {
+      x.beginPath();
+      x.moveTo(nowX + d, yOf(0));
+      x.lineTo(nowX + d + plotH, top);
+      x.stroke();
+    }
+    x.restore();
+    x.strokeStyle = `rgba(${fcRGB},.55)`; x.lineWidth = 1.2;
+    x.setLineDash([3, 3]);
+    x.lineDashOffset = REDUCE_MOTION ? 0 : -((T * 9) % 6);
+    x.beginPath(); x.moveTo(nowX, curY); x.lineTo(endX, endY); x.stroke();
+    x.setLineDash([]); x.lineDashOffset = 0;
+    x.fillStyle = `rgba(${fcRGB},.9)`;
+    x.beginPath(); x.arc(endX, endY, 1.5, 0, TAU); x.fill();
+  }
+
+  const pulse = REDUCE_MOTION ? 0.5 : 0.5 + 0.5 * Math.sin(T * 2.6);
+
+  if (revealing) {
+    x.restore();
+    const sg = x.createLinearGradient(clipX - 10, 0, clipX, 0);
+    sg.addColorStop(0, 'rgba(240,166,198,0)');
+    sg.addColorStop(1, 'rgba(240,166,198,.2)');
+    x.fillStyle = sg; x.fillRect(clipX - 10, top, 10, plotH);
+    x.fillStyle = 'rgba(240,166,198,.85)';
+    x.fillRect(clipX, top, 1, plotH);
+  } else {
+    // live-edge cursor (same pink playhead as the original repo), softly breathing
+    const a = REDUCE_MOTION ? 0.3 : 0.22 + 0.16 * pulse;
+    const pg = x.createLinearGradient(0, top, 0, top + plotH);
+    pg.addColorStop(0, `rgba(240,166,198,${(a * 0.2).toFixed(3)})`);
+    pg.addColorStop(0.5, `rgba(240,166,198,${a.toFixed(3)})`);
+    pg.addColorStop(1, `rgba(240,166,198,${(a * 0.2).toFixed(3)})`);
+    x.fillStyle = pg; x.fillRect(nowX - 2.5, top, 5, plotH);
+    x.fillStyle = `rgba(240,166,198,${(a + 0.25).toFixed(3)})`;
+    x.fillRect(nowX, top, 1, plotH);
+
+    // current point + fresh-sample ping + value (drawn on top of the cursor)
+    if (QUOTA.ping > 0) {
+      const p = 1 - QUOTA.ping;
+      x.strokeStyle = `rgba(${rgb},${(QUOTA.ping * 0.55).toFixed(3)})`; x.lineWidth = 1;
+      x.beginPath(); x.arc(nowX, curY, 3 + 11 * p, 0, TAU); x.stroke();
+    }
+    const glow = x.createRadialGradient(nowX, curY, 0, nowX, curY, 6 + 2 * pulse);
+    glow.addColorStop(0, `rgba(${rgb},.45)`);
+    glow.addColorStop(1, `rgba(${rgb},0)`);
+    x.fillStyle = glow;
+    x.beginPath(); x.arc(nowX, curY, 6 + 2 * pulse, 0, TAU); x.fill();
+    x.strokeStyle = `rgba(${rgb},.95)`; x.lineWidth = 1;
+    x.beginPath(); x.arc(nowX, curY, 2.4, 0, TAU); x.stroke();
+    x.fillStyle = '#ffffff';
+    x.beginPath(); x.arc(nowX, curY, 1.1, 0, TAU); x.fill();
+    x.fillStyle = '#f4f5f7'; x.textAlign = 'center';
+    const labelX = Math.max(lx + 12, Math.min(w - rx - 12, nowX));
+    x.fillText(`${Math.round(item.used)}%`, labelX, curY < top + 10 ? curY + 10 : curY - 8);
+    x.textAlign = 'left';
   }
 }
 
 const DAY_LABELS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-function heatDays(state) {
-  const cells = state?.activity?.cells || [];
-  const dates = [...new Set(cells.map(c => c.date))].filter(Boolean).sort();
-  return dates.length ? dates.slice(-7) : DAY_LABELS;
-}
 function heatColor(v, peak) {
   if (v == null) return '#131519';
   if (v === 0) return '#191b20';
@@ -1748,57 +2145,78 @@ function heatColor(v, peak) {
   if (t > 0.12) return '#3a3e46';
   return '#23262b';
 }
-let HEAT_HIT = [];
-function drawActivityHeatmap(state) {
+/* heatmap: 7 days x 24h, with the original scan-column sweep + hot-cell pulse */
+const HEAT = { days: [], matrix: [], totals: [], peak: 1, maxDay: -1, hasData: false };
+function buildHeat(state) {
+  const cells = state?.activity?.cells || [];
+  const dates = [...new Set(cells.map(c => c.date))].filter(Boolean).sort();
+  const days = new Array(7).fill('');
+  const matrix = Array.from({ length: 7 }, () => new Array(24).fill(null));
+  let peak = 1;
+  if (dates.length) {
+    const use = dates.slice(-7);
+    const start = 7 - use.length;
+    use.forEach((d, i) => { days[start + i] = d; });
+    const index = new Map(use.map((d, i) => [d, start + i]));
+    cells.forEach(c => {
+      const di = index.get(c.date);
+      if (di == null || c.hour == null || c.hour < 0 || c.hour > 23) return;
+      if (matrix[di][c.hour] == null) matrix[di][c.hour] = 0;
+      matrix[di][c.hour] += Number(c.count) || 0;
+    });
+    matrix.forEach(row => row.forEach(v => { if (v != null) peak = Math.max(peak, v); }));
+  } else {
+    DAY_LABELS.forEach((d, i) => { days[i] = d; });
+  }
+  const totals = matrix.map(row => row.reduce((a, v) => a + (v || 0), 0));
+  const maxDay = totals.indexOf(Math.max(...totals));
+  HEAT.days = days; HEAT.matrix = matrix; HEAT.totals = totals;
+  HEAT.peak = peak; HEAT.maxDay = maxDay; HEAT.hasData = dates.length > 0;
+}
+function drawActivityHeatmap() {
+  if (!cIdx.x || !cIdx.w || HEAT.matrix.length !== 7) return;
   const x = cIdx.x, w = cIdx.w, h = cIdx.h;
   x.clearRect(0, 0, w, h);
   x.font = `600 6.5px ${FONT}`; x.textBaseline = 'middle';
-  const lx = 26, rx = 2, rows = 7, cols = 24;
+  const lx = 26, rx = 30, rows = 7, cols = 24;
   const top = 8, cw = (w - lx - rx) / cols, ch = (h - top) / rows;
-  const days = heatDays(state);
-  const cells = state?.activity?.cells || [];
-  let peak = 1;
-  const matrix = Array.from({ length: 7 }, () => new Array(24).fill(null));
-  if (cells.length) {
-    cells.forEach(c => {
-      const di = days.indexOf(c.date);
-      if (di < 0 || c.hour == null) return;
-      if (matrix[di][c.hour] == null) matrix[di][c.hour] = 0;
-      matrix[di][c.hour] += (c.count || 0);
-      peak = Math.max(peak, matrix[di][c.hour]);
-    });
-  }
-  HEAT_HIT = [];
+  const scan = Math.floor((T * 5) % cols);
+  const pulse = 0.5 + 0.5 * Math.sin(T * 2.2);
   [0, 6, 12, 18, 23].forEach(hr => {
     const px = lx + hr * cw + cw / 2;
     x.fillStyle = '#5f646d'; x.textAlign = hr === 23 ? 'right' : 'center';
-    x.fillText(String(hr).padStart(2, '0'), hr === 23 ? w : px, 4);
+    x.fillText(String(hr).padStart(2, '0'), hr === 23 ? lx + cols * cw : px, 4);
   });
-  x.textAlign = 'left';
+  x.textAlign = 'right'; x.fillStyle = '#5f646d'; x.fillText('Σ', w, 4); x.textAlign = 'left';
   for (let j = 0; j < rows; j++) {
-    const label = days[j].length > 5 ? days[j].slice(5) : days[j];
-    x.fillStyle = '#6b6f78'; x.fillText(label, 0, top + j * ch + ch / 2);
+    const y = top + j * ch, yc = y + ch / 2;
+    const label = HEAT.days[j] || '';
+    const hasDay = !!label && HEAT.hasData;
+    x.fillStyle = '#6b6f78';
+    x.fillText(label.length > 5 ? label.slice(5) : label, 0, yc);
+    const total = HEAT.totals[j] || 0;
+    x.textAlign = 'right';
+    x.fillStyle = hasDay ? (j === HEAT.maxDay && total > 0 ? '#f0a6c6' : '#7c808a') : '#3f434a';
+    x.fillText(hasDay ? fmtCompact(total) : DASH, w, yc);
+    x.textAlign = 'left';
     for (let i = 0; i < cols; i++) {
-      const v = matrix[j][i];
-      const px = lx + i * cw, py = top + j * ch;
-      x.fillStyle = heatColor(v, peak);
-      x.fillRect(px, py + 0.5, Math.max(0.6, cw - 0.9), Math.max(1, ch - 1.2));
-      if (v != null) HEAT_HIT.push({ x: px, y: py, w: cw, h: ch, day: days[j], hour: i, count: v });
+      const v = HEAT.matrix[j][i];
+      const px = lx + i * cw, py = y + 0.5;
+      let col = heatColor(v, HEAT.peak);
+      if (i === scan) col = v == null ? '#191b20' : v > 0 ? '#ffffff' : '#3a3e46';
+      x.fillStyle = col;
+      x.fillRect(px, py, Math.max(0.6, cw - 0.9), Math.max(1, ch - 1.2));
+      if (v != null && v > 0 && v / HEAT.peak > 0.55 && i !== scan) {
+        x.globalAlpha = 0.06 + 0.16 * pulse;
+        x.fillStyle = '#ffffff';
+        x.fillRect(px, py, Math.max(0.6, cw - 0.9), Math.max(1, ch - 1.2));
+        x.globalAlpha = 1;
+      }
     }
   }
 }
 
 /* ---------- data snapshot ---------- */
-function sampleQuota(state) {
-  const main = (state?.usage?.quota || []).find(q => q.available) || null;
-  const vals = main ? [main.rolling, main.weekly, main.monthly] : [null, null, null];
-  vals.forEach((v, k) => {
-    if (v == null) return;
-    const left = Math.max(0, Math.min(100, 100 - Number(v)));
-    HISTORY.quota[k].push(left);
-    if (HISTORY.quota[k].length > 40) HISTORY.quota[k].shift();
-  });
-}
 function renderAll(state) {
   STATE = state;
   const summary = state?.summary || null;
@@ -1810,8 +2228,9 @@ function renderAll(state) {
   renderUnits(state);
   renderTokenStats(state);
   buildChecks(state);
-  sampleQuota(state);
-  paintStaticPanels();
+  buildQuota(state);
+  buildUptime(state);
+  buildHeat(state);
 }
 
 function setHaloStatus(kind, text, updated) {
@@ -1898,6 +2317,10 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now; T += dt;
   drawStage(dt);
   drawTokenFlow(dt, STATE);
+  drawServiceUptime(dt);
+  drawQuota(dt);
+  drawActivityHeatmap();
+  animateUnits(dt);
   requestAnimationFrame(frame);
 }
 let rzT, ready = false, started = false;

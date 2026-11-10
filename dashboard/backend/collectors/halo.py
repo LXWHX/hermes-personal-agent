@@ -123,6 +123,8 @@ def _usage(usage: dict) -> dict:
                 "weekly": item.get("weekly"),
                 "monthly": item.get("monthly"),
                 "resets_at": item.get("resets_at"),
+                "resets": item.get("resets"),
+                "history": item.get("history"),
             }
             for item in usage.get("quota") or []
         ],

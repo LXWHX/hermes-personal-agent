@@ -88,6 +88,11 @@ def _quota_item(key_id: str, label: str, path: Path, env_name: str) -> dict:
         "weekly": windows["weekly"]["percent"],
         "monthly": windows["monthly"]["percent"],
         "resets_at": windows["monthly"]["resets_at"],
+        "resets": {
+            "rolling": windows["rolling"]["resets_at"],
+            "weekly": windows["weekly"]["resets_at"],
+            "monthly": windows["monthly"]["resets_at"],
+        },
         "windows": windows,
         "_fingerprint": fingerprint,
     }

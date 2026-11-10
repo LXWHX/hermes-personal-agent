@@ -6,6 +6,7 @@ DATA / DEMO, so demo values can never be mistaken for a live reading.
 """
 from __future__ import annotations
 
+import math
 import random
 from datetime import timedelta
 
@@ -307,6 +308,34 @@ def outputs() -> dict:
     }
 
 
+def _quota_history(rolling: float, weekly: float, monthly: float) -> dict:
+    """Deterministic demo series; production history comes from quota_history.py.
+
+    The spans mirror the demo reset offsets (rolling +2h, weekly +2d,
+    monthly +3d) so the chart starts at the left edge of the current window.
+    """
+    end = now()
+
+    def series(seconds: int, value: float, points: int, shape) -> list[dict]:
+        rows = []
+        for i in range(points):
+            frac = i / (points - 1)
+            stamp = end - timedelta(seconds=seconds * (1 - frac))
+            used = max(0.0, min(100.0, value * shape(frac)))
+            rows.append({"t": int(stamp.timestamp()), "v": round(used, 1)})
+        rows[-1]["v"] = round(value, 1)
+        return rows
+
+    return {
+        "rolling": series(3 * 3600, rolling, 60,
+                          lambda x: 0.05 + 0.95 * x + 0.08 * math.sin(x * 9)),
+        "weekly": series(5 * 86400, weekly, 84,
+                         lambda x: 0.04 + 0.96 * (x ** 1.1) + 0.03 * math.sin(x * 13)),
+        "monthly": series(27 * 86400, monthly, 120,
+                          lambda x: 0.03 + 0.97 * (x ** 1.45)),
+    }
+
+
 def usage() -> dict:
     return {
         "profiles": [
@@ -316,9 +345,21 @@ def usage() -> dict:
             {"id": "sentinels", "name": "哨兵", "requests": 51, "failures": 2, "tokens_in": 612_000, "tokens_out": 88_000, "p50_ms": 2210, "p95_ms": 6120, "cost_usd": 0.77},
         ],
         "quota": [
-            {"label": "主线路", "key": "main", "remaining": 59, "rolling": 41, "weekly": 38, "monthly": 41, "resets_at": _at(0, 0, 1)[:10], "available": True},
-            {"label": "汉堡", "key": "hamburger", "remaining": 72, "rolling": 18, "weekly": 28, "monthly": 24, "resets_at": _at(0, 0, 3)[:10], "available": True},
-            {"label": "小黑盒 / biubiu", "key": "sidecar", "remaining": 86, "rolling": 9, "weekly": 14, "monthly": 12, "resets_at": _at(0, 0, 5)[:10], "available": True},
+            {"label": "主线路", "key": "main", "remaining": 59, "rolling": 41, "weekly": 38, "monthly": 41,
+             "resets_at": _at(0, 0, 3)[:10],
+             "resets": {"rolling": _at((now().hour + 2) % 24, 0, 1 if now().hour + 2 >= 24 else 0),
+                        "weekly": _at(0, 0, 2), "monthly": _at(0, 0, 3)},
+             "history": _quota_history(41, 38, 41), "available": True},
+            {"label": "汉堡", "key": "hamburger", "remaining": 72, "rolling": 18, "weekly": 28, "monthly": 24,
+             "resets_at": _at(0, 0, 3)[:10],
+             "resets": {"rolling": _at((now().hour + 3) % 24, 0, 1 if now().hour + 3 >= 24 else 0),
+                        "weekly": _at(0, 0, 3), "monthly": _at(0, 0, 3)},
+             "history": _quota_history(18, 28, 24), "available": True},
+            {"label": "小黑盒 / biubiu", "key": "sidecar", "remaining": 86, "rolling": 9, "weekly": 14, "monthly": 12,
+             "resets_at": _at(0, 0, 5)[:10],
+             "resets": {"rolling": _at((now().hour + 4) % 24, 0, 1 if now().hour + 4 >= 24 else 0),
+                        "weekly": _at(0, 0, 5), "monthly": _at(0, 0, 5)},
+             "history": _quota_history(9, 14, 12), "available": True},
         ],
         "today_cost_usd": 5.98,
         "tokens_today": 214_600,
