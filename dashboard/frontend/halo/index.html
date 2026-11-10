@@ -1885,7 +1885,7 @@ function buildQuota(state) {
   }));
   if (quotaCapEl) {
     const hasEst = QUOTA.items.some(it => it.history.some(p => p.est));
-    quotaCapEl.textContent = `${main?.label ? main.label + ' · ' : ''}used % · 5h/7d/30d · hatch = forecast${hasEst ? ' · dashed = est' : ''}`;
+    quotaCapEl.textContent = `${main?.label ? main.label + ' · ' : ''}used % · hatch = forecast${hasEst ? ' · dashed = est' : ''}`;
   }
   // motion triggers: sweep the line in when a window first has data, ping the live point on new samples
   QUOTA.items.forEach(it => {
