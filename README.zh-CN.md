@@ -29,7 +29,7 @@
                                       ↓
                             FastAPI 只读 sidecar（127.0.0.1:8787）
                                       ↓
-     systemd / journalctl / crontab / 错误中枢（18 源）/ 任务板 / 四个 profile 的 state.db
+     systemd / journalctl / crontab / 错误中枢（21 源）/ 任务板 / 四个 profile 的 state.db
 ```
 
 - **只读**：没有任何写线上状态的接口；8787 只绑 loopback，公网入口全靠 cloudflared 出站隧道
@@ -59,11 +59,12 @@ HERMES_DASHBOARD_DEMO=1 python -m uvicorn app:app --port 8787
 ├── DESIGN.md            # 设计文档：模块、数据源、接口契约、部署与验收清单
 ├── LICENSE              # MIT
 └── dashboard/
-    ├── backend/         # FastAPI：13 个只读 API（含 SSE 日志流）+ TTL 缓存 + 服务端脱敏
+    ├── backend/         # FastAPI：14 个只读 API（含 /api/halo 与 SSE 日志流）+ TTL 缓存 + 服务端脱敏
     │   ├── app.py
     │   └── collectors/  # services / jobs / errors / board / activity / outputs /
-    │                   #            usage / events / overview / drift / system
+    │                   #            usage / events / overview / drift / system / halo
     └── frontend/        # 零依赖原生 JS/CSS + 离线 demo 数据
+        └── halo/        # HALOFLUX 修改版页面（PolyForm Noncommercial 1.0.0；见目录内 NOTICE/LICENSE）
 ```
 
 > 完整系统远不止这个面板——出于隐私只公开监控面板这一层；设计取舍、口径与验收过程
@@ -72,3 +73,9 @@ HERMES_DASHBOARD_DEMO=1 python -m uvicorn app:app --port 8787
 ## License
 
 [MIT](LICENSE)
+
+> **例外：** `dashboard/frontend/halo/` 是 Ryder191 的
+> [HALOFLUX](https://github.com/Ryder191/haloflux) 修改版，采用
+> **PolyForm Noncommercial License 1.0.0**，仅限非商用。必需版权声明与完整许可文本
+> 随目录保留在 `dashboard/frontend/halo/NOTICE` 与 `dashboard/frontend/halo/LICENSE`。
+> 上方 MIT 许可适用于本仓库其余部分。

@@ -33,7 +33,7 @@ Browser → Cloudflare Access → cloudflared (outbound tunnel, zero inbound por
                                         ↓
                             FastAPI read-only sidecar (127.0.0.1:8787)
                                         ↓
-  systemd / journalctl / crontab / error hub (18 sources) / task boards / 4 profile state.db
+  systemd / journalctl / crontab / error hub (21 sources) / task boards / 4 profile state.db
 ```
 
 - **Read-only**: no endpoint writes live state; 8787 binds to loopback only, and public
@@ -69,11 +69,12 @@ unreachable it automatically falls back to bundled offline demo data.
 ├── DESIGN.md            # design doc: modules, data sources, API contracts, deploy & acceptance
 ├── LICENSE              # MIT
 └── dashboard/
-    ├── backend/         # FastAPI: 13 read-only APIs (incl. an SSE log stream) + TTL cache + server-side redaction
+    ├── backend/         # FastAPI: 14 read-only APIs (incl. /api/halo and an SSE log stream) + TTL cache + server-side redaction
     │   ├── app.py
     │   └── collectors/  # services / jobs / errors / board / activity / outputs /
-    │                   #            usage / events / overview / drift / system
+    │                   #            usage / events / overview / drift / system / halo
     └── frontend/        # zero-dependency vanilla JS/CSS + offline demo data
+        └── halo/        # HALOFLUX-derived page (PolyForm Noncommercial 1.0.0; see NOTICE/LICENSE there)
 ```
 
 > The full system is much more than this dashboard — for privacy, only this monitoring
@@ -83,3 +84,10 @@ unreachable it automatically falls back to bundled offline demo data.
 ## License
 
 [MIT](LICENSE)
+
+> **Exception:** `dashboard/frontend/halo/` is a modified version of Ryder191's
+> [HALOFLUX](https://github.com/Ryder191/haloflux) and is licensed under the
+> **PolyForm Noncommercial License 1.0.0** — noncommercial use only. The required
+> copyright notice and full license text are kept in
+> `dashboard/frontend/halo/NOTICE` and `dashboard/frontend/halo/LICENSE`.
+> The MIT license above applies to the rest of this repository.
