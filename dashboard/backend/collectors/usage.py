@@ -273,10 +273,12 @@ def collect(include_quota: bool = True) -> dict:
             fingerprint = item.pop("_fingerprint", None)
             if fingerprint and fingerprint in merged:
                 existing = merged[fingerprint]
-                if item["label"] not in existing["label"]:
-                    existing["label"] = f"{existing['label']} / {item['label']}"
+                merged_label = existing["label"]
+                if item["label"] not in merged_label:
+                    merged_label = f"{merged_label} / {item['label']}"
                 if not existing.get("available") and item.get("available"):
                     existing.update(item)
+                existing["label"] = merged_label
                 continue
             merged[fingerprint or item["key"]] = item
         quota = list(merged.values())

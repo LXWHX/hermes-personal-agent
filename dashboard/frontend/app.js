@@ -15,20 +15,15 @@
     service: '服务', cron: '任务', error: '错误', errors: '采集', approval: '审批',
     task: '计划', body: '身体', output: '产出', alert: '告警',
   };
-  const DEMO_KEY_MAP = {
-    '/api/overview': 'overview',
-    '/api/services': 'services',
-    '/api/jobs': 'jobs',
-    '/api/activity': 'activity',
-    '/api/errors': 'errors',
-    '/api/board': 'board',
-    '/api/outputs': 'outputs',
-    '/api/usage': 'usage',
-    '/api/drift': 'drift',
-    '/api/system': 'system',
-    '/api/events': 'events',
-    '/api/logs/recent': 'logs',
-  };
+
+  function loadMutedEvents() {
+    try {
+      const saved = JSON.parse(localStorage.getItem('hermes-muted-events') || '[]');
+      return new Set(Array.isArray(saved) ? saved : []);
+    } catch (_) {
+      return new Set();
+    }
+  }
 
   const state = {
     range: '7d',
@@ -41,7 +36,7 @@
     lastUpdate: null,
     nextPollAt: null,
     stamps: {},
-    muted: new Set(JSON.parse(localStorage.getItem('hermes-muted-events') || '[]')),
+    muted: loadMutedEvents(),
     logRole: 'hanbao',
     logSource: null,
     lastFocus: null,
@@ -548,13 +543,16 @@
     });
   }
 
+  const SHANGHAI_DAY = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  });
+
   function parseDate(value) {
     if (!value) return null;
     if (/^\d{2}:\d{2}(:\d{2})?$/.test(String(value))) {
-      const d = new Date();
-      const [h, m] = String(value).split(':').map(Number);
-      d.setHours(h, m, 0, 0);
-      return d;
+      // 裸时间来自日志/cron，已是北京时间；按 Asia/Shanghai 解析，避免按浏览器本地时区错位。
+      const d = new Date(`${SHANGHAI_DAY.format(new Date())}T${String(value)}+08:00`);
+      return Number.isNaN(d.getTime()) ? null : d;
     }
     const d = new Date(value);
     return Number.isNaN(d.getTime()) ? null : d;
@@ -563,13 +561,18 @@
   function hhmm(value) {
     const d = parseDate(value);
     if (!d) return '—';
-    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return d.toLocaleTimeString('zh-CN', {
+      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Shanghai',
+    });
   }
 
   function hhmmss(value) {
     const d = parseDate(value);
     if (!d) return '—';
-    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    return d.toLocaleTimeString('zh-CN', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+      timeZone: 'Asia/Shanghai',
+    });
   }
 
   function dateLabel(value) {
@@ -1588,6 +1591,7 @@
     try {
       const source = new EventSource(`/api/logs/stream?role=${encodeURIComponent(role)}`);
       state.logSource = source;
+      let snapshotTried = false;
       source.addEventListener('open', () => {
         status.textContent = 'LIVE';
         status.classList.add('is-live');
@@ -1595,9 +1599,18 @@
       source.addEventListener('log', (event) => {
         try { appendLog(JSON.parse(event.data)); } catch (_) { /* ignore malformed frame */ }
       });
-      source.addEventListener('error', () => {
+      source.addEventListener('error', async () => {
         status.textContent = '重连中 / DISCONNECTED';
         status.classList.remove('is-live');
+        // SSE 被代理缓冲/断开时先用一次性快照兜底，避免日志面板一直空等。
+        if (snapshotTried) return;
+        snapshotTried = true;
+        const payload = await fetchJSON(`/api/logs/recent?role=${encodeURIComponent(role)}`);
+        const lines = payload && payload.ok && payload.data && payload.data.lines;
+        if (!Array.isArray(lines) || !lines.length) return;
+        $('#log-console').innerHTML = '';
+        lines.forEach(appendLog);
+        status.textContent = '快照 / SNAPSHOT';
       });
     } catch (err) {
       status.textContent = '日志流不可用';

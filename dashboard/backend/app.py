@@ -518,7 +518,7 @@ def api_halo(request: Request):
     if DEMO:
         return _respond(halo.from_demo(demo.snapshot(), viewer), viewer=viewer)
     try:
-        data = _halo_data(viewer)
+        data = CACHE.get(f"halo:{viewer}", TTL, lambda: _halo_data(viewer), stale=STALE)
     except Exception as exc:
         dlog.exception("halo 聚合失败")
         return _respond({"error": redact(f"{type(exc).__name__}: {exc}")[:240]},

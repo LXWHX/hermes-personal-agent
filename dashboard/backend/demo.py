@@ -198,7 +198,7 @@ def activity() -> dict:
             for hour in range(24):
                 if start <= hour <= end:
                     count = rng.randint(0, 9)
-                    if role == "biubiu" and d == 6 and hour > today.hour:
+                    if d == 6 and hour > today.hour:
                         count = 0
                     if role == "biubiu" and d == 6 and hour >= 20:
                         count = 0

@@ -134,7 +134,6 @@ def _collect_db(path, default_role: str, days: int) -> tuple[list[dict], list[st
         return [], [f"{path.name} 打开失败：{redact(str(exc))[:100]}"]
     try:
         rows = _sessions_rows(con, days)
-        joined = rows is not None
         if rows is None:
             rows = _legacy_rows(con, _tables(con), days)
         if rows is None:
@@ -150,7 +149,7 @@ def _collect_db(path, default_role: str, days: int) -> tuple[list[dict], list[st
     cells = []
     for row in rows:
         # Sidecar DBs only contain one agent; trust the directory mapping.
-        role = default_role if path != STATE_DB else (_normalize_role(row["profile"]) if joined else _normalize_role(row["profile"]))
+        role = default_role if path != STATE_DB else _normalize_role(row["profile"])
         if role == "system":
             continue
         cells.append({
