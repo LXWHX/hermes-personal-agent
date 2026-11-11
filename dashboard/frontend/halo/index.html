@@ -1304,7 +1304,7 @@ setInterval(() => {
 const DASH = '—';
 const HALO_API = '/api/halo';
 const REFRESH_MS = 20000;
-const FETCH_TIMEOUT_MS = 8000;
+const FETCH_TIMEOUT_MS = 10000;
 const DEMO_PARAM = new URLSearchParams(location.search).get('demo') === '1';
 const HALO_URL = DEMO_PARAM ? `${HALO_API}?demo=1` : HALO_API;
 let STATE = null;
@@ -2055,15 +2055,21 @@ function drawQuota(dt) {
       liveSeg.path.forEach(([px, py], i) => i ? x.lineTo(px, py) : x.moveTo(px, py));
       x.stroke();
     }
-    // travelling pulse only on the live portion, so the estimate stays quiet
+    // travelling comet only on the live portion, so the estimate stays quiet.
+    // The lit segment trails the dot and both share one life cycle: a run ends
+    // with the dot reaching the last point, never with a stray dotless bar.
     const pulseSeg = liveSeg || estSeg;
     if (!REDUCE_MOTION && pulseSeg && pulseSeg.total > 8) {
       const path = pulseSeg.path, cum = pulseSeg.cum, total = pulseSeg.total;
       const dash = Math.max(9, Math.min(30, total * 0.2));
-      const head = (T * 40) % (total + dash + 24);
+      const pause = 24;
+      const travel = (T * 40) % (total + pause);
+      const head = Math.min(travel, total);
+      const fade = travel > total ? Math.max(0, 1 - (travel - total) / pause) : 1;
       x.save();
+      x.globalAlpha = fade;
       x.setLineDash([dash, total + 1]);
-      x.lineDashOffset = -head;
+      x.lineDashOffset = dash - head; // lit segment = [head - dash, head]
       x.strokeStyle = `rgba(${rgb},.22)`; x.lineWidth = 3.4;
       x.beginPath();
       path.forEach(([px, py], i) => i ? x.lineTo(px, py) : x.moveTo(px, py));
@@ -2073,18 +2079,14 @@ function drawQuota(dt) {
       path.forEach(([px, py], i) => i ? x.lineTo(px, py) : x.moveTo(px, py));
       x.stroke();
       x.restore();
-      const lead = head + dash;
-      if (lead < total) {
-        const [hx, hy] = quotaPointAt(path, cum, lead);
-        const fade = Math.min(1, (total - lead) / 10);
-        const hg = x.createRadialGradient(hx, hy, 0, hx, hy, 7);
-        hg.addColorStop(0, `rgba(${rgb},${(0.5 * fade).toFixed(3)})`);
-        hg.addColorStop(1, `rgba(${rgb},0)`);
-        x.fillStyle = hg;
-        x.beginPath(); x.arc(hx, hy, 7, 0, TAU); x.fill();
-        x.fillStyle = `rgba(${rgb},${(0.95 * fade).toFixed(3)})`;
-        x.beginPath(); x.arc(hx, hy, 1.5, 0, TAU); x.fill();
-      }
+      const [hx, hy] = quotaPointAt(path, cum, head);
+      const hg = x.createRadialGradient(hx, hy, 0, hx, hy, 7);
+      hg.addColorStop(0, `rgba(${rgb},${(0.5 * fade).toFixed(3)})`);
+      hg.addColorStop(1, `rgba(${rgb},0)`);
+      x.fillStyle = hg;
+      x.beginPath(); x.arc(hx, hy, 7, 0, TAU); x.fill();
+      x.fillStyle = `rgba(${rgb},${(0.95 * fade).toFixed(3)})`;
+      x.beginPath(); x.arc(hx, hy, 1.5, 0, TAU); x.fill();
     }
     // show the uncollected gap instead of pretending it is a flat line
     const gap = (pts[0].t - win.start) / span;

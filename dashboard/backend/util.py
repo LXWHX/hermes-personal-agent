@@ -62,7 +62,8 @@ def parse_iso(value: str | None) -> datetime | None:
         return None
 
 
-def run(cmd: list[str], timeout: float = 8, check: bool = False) -> tuple[int, str, str]:
+def run(cmd: list[str], timeout: float = 8, check: bool = False,
+        env: dict[str, str] | None = None) -> tuple[int, str, str]:
     """Run a command without a shell.  Returns (rc, stdout, stderr)."""
     try:
         proc = subprocess.run(
@@ -72,6 +73,7 @@ def run(cmd: list[str], timeout: float = 8, check: bool = False) -> tuple[int, s
             timeout=timeout,
             encoding="utf-8",
             errors="replace",
+            env=env,
         )
         if check and proc.returncode != 0:
             raise RuntimeError((proc.stderr or proc.stdout).strip()[:300])

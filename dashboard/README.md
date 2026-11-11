@@ -112,7 +112,10 @@ systemd `cloudflared` active/enabled，4 条 QUIC 连接挂东京边缘。
 | `GET /api/logs/recent` | 日志快照（SSE 不可用时兜底） |
 
 单源失败只让对应模块返回 `{"error": ...}` 或空数据 + `warnings`，不影响整页。
-缓存默认 20s（`HERMES_DASHBOARD_TTL`），额度/漂移 60s，出站探测 120s。
+缓存默认 20s（`HERMES_DASHBOARD_TTL`）；过期后先返回上一份数据并在后台刷新
+（`HERMES_DASHBOARD_STALE`，默认 120s），额度/漂移 60s，出站探测 120s。
+定时任务直接读 `~/.hermes/cron/jobs.json`，不再每次请求启动 `hermes cron list`
+（两个 profile 约 5s）；文件缺失/损坏时才回退 CLI。
 
 ## 错误日志与可用性监控（2026-10-26）
 

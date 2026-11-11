@@ -31,6 +31,10 @@ from util import DEMO, ROOT, envelope, iso, redact, tail, viewer_for
 
 FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
 TTL = float(os.environ.get("HERMES_DASHBOARD_TTL", "20"))
+# After TTL expires, serve the last snapshot immediately and refresh in the
+# background.  The wall polls every 20s; without this a cold collector (the
+# cron store used to take ~5s) blocks every poll that lands after expiry.
+STALE = float(os.environ.get("HERMES_DASHBOARD_STALE", "120"))
 
 app = FastAPI(title="Hermes Dashboard", docs_url=None, redoc_url=None)
 
@@ -95,7 +99,7 @@ def _load(name: str, loader, *args, **kwargs) -> dict:
     if DEMO:
         return demo.snapshot()[name.split(":", 1)[0]]
     try:
-        return CACHE.get(name, TTL, lambda: loader(*args, **kwargs))
+        return CACHE.get(name, TTL, lambda: loader(*args, **kwargs), stale=STALE)
     except Exception as exc:  # one bad source must not take down the page
         dlog.error(f"{name} 采集失败", exc, throttle_key=f"collect:{name}")
         return {"error": redact(f"{type(exc).__name__}: {exc}")[:240],
@@ -186,8 +190,8 @@ def _usage(include_quota: bool = True) -> dict:
     if DEMO:
         return demo.snapshot()["usage"]
     if include_quota:
-        return CACHE.get("usage", 60, usage.collect)
-    return CACHE.get("usage:profiles", 45, lambda: usage.collect(False))
+        return CACHE.get("usage", 60, usage.collect, stale=STALE)
+    return CACHE.get("usage:profiles", 45, lambda: usage.collect(False), stale=STALE)
 
 
 def _halo_usage() -> dict:
@@ -206,7 +210,7 @@ def _drift() -> dict:
     if DEMO:
         return demo.snapshot()["drift"]
     try:
-        return CACHE.get("drift", 60, drift.collect)
+        return CACHE.get("drift", 60, drift.collect, stale=STALE)
     except Exception as exc:  # git may be missing or the repo may be gone
         dlog.error("drift 采集失败", exc, throttle_key="collect:drift")
         return {"error": redact(f"{type(exc).__name__}: {exc}")[:240],
@@ -219,7 +223,7 @@ def _system() -> dict:
     host = _load("system:host", system.collect_host)
     try:
         # outbound probes are slow; cache them longer than the /proc numbers
-        net = CACHE.get("system:net", 120, system.collect_network)
+        net = CACHE.get("system:net", 120, system.collect_network, stale=STALE)
     except Exception as exc:
         dlog.error("system:net 采集失败", exc, throttle_key="collect:system:net")
         net = {"network": None, "checked": None,
@@ -474,17 +478,17 @@ def _halo_data(viewer: str) -> dict:
     `outputs` is loaded for guests too because `delivery_summary` (channel-level
     ok/failed counts) is derived from it; the raw items never leave the server.
     """
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    with ThreadPoolExecutor(max_workers=7) as pool:
         futures = {
             "services": pool.submit(_services),
             "jobs": pool.submit(_jobs),
             "activity": pool.submit(_activity, "7d"),
-            "activity_today": pool.submit(_activity, "24h"),
             "usage": pool.submit(_halo_usage),
             "outputs": pool.submit(_outputs),
         }
         if viewer != "guest":
             futures["errors"] = pool.submit(_errors)
+            futures["logs"] = pool.submit(_halo_logs)
         loaded = {name: future.result() for name, future in futures.items()}
 
     errors_data = loaded.get("errors") or {}
@@ -494,12 +498,15 @@ def _halo_data(viewer: str) -> dict:
     events_data = (events.collect(loaded["services"], loaded["jobs"], errors_data, {})
                    if viewer != "guest" else {})
     data = halo.collect(
-        loaded["services"], loaded["jobs"], loaded["activity"], loaded["activity_today"],
+        # activity_today is intentionally empty: the 7d cells already contain
+        # today at hour resolution, so `_messages_today` derives it without a
+        # second pass over all four state databases.
+        loaded["services"], loaded["jobs"], loaded["activity"], {},
         loaded["usage"], overview_data,
         errors=errors_data,
         outputs=loaded["outputs"],
         events=events_data,
-        logs=_halo_logs() if viewer != "guest" else [],
+        logs=loaded.get("logs") or [],
         viewer=viewer,
     )
     if viewer != "guest":

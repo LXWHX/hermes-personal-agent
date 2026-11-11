@@ -17,14 +17,55 @@ class TTLCache:
         self._lock = threading.Lock()
         self._items: dict[str, tuple[float, Any]] = {}
         self._key_locks: dict[str, threading.Lock] = {}
+        self._refreshing: set[str] = set()
 
-    def get(self, key: str, ttl: float, loader: Callable[[], Any]) -> Any:
+    def _refresh(self, key: str, loader: Callable[[], Any]) -> None:
+        """Recompute in the background, coalescing concurrent refreshes."""
+        with self._lock:
+            if key in self._refreshing:
+                return
+            self._refreshing.add(key)
+
+        def run() -> None:
+            try:
+                value = loader()
+            except Exception:
+                # Keep the last good value: a stale dashboard beats a blank one.
+                try:
+                    import log as dlog
+                    dlog.exception(f"cache refresh failed: {key}")
+                except Exception:
+                    pass
+                return
+            else:
+                with self._lock:
+                    self._items[key] = (time.monotonic(), value)
+            finally:
+                with self._lock:
+                    self._refreshing.discard(key)
+
+        threading.Thread(target=run, name=f"cache-refresh:{key}", daemon=True).start()
+
+    def get(self, key: str, ttl: float, loader: Callable[[], Any],
+            stale: float = 0) -> Any:
+        """Return a cached value, optionally serving stale data while refreshing.
+
+        `stale` is the extra grace window after `ttl`: within it the caller gets
+        the previous value immediately and a background thread recomputes it.
+        The slow /halo aggregate can then answer in ~0.1s instead of blocking
+        the browser for the full collector latency.
+        """
         now = time.monotonic()
         with self._lock:
             hit = self._items.get(key)
             key_lock = self._key_locks.setdefault(key, threading.Lock())
-        if hit and now - hit[0] < ttl:
-            return hit[1]
+        if hit:
+            age = now - hit[0]
+            if age < ttl:
+                return hit[1]
+            if stale and age < ttl + stale:
+                self._refresh(key, loader)
+                return hit[1]
         with key_lock:
             # Another request may have filled it while we waited.
             now = time.monotonic()

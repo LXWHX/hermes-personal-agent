@@ -15,13 +15,22 @@ import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from util import ROOT, now, parse_iso, redact, run, tail
+from util import ROOT, now, parse_iso, read_json, redact, run, tail
 
 CRON_OUTPUT = ROOT / ".hermes" / "cron" / "output"
 HERMES_CANDIDATES = [
     "/root/.local/bin/hermes",
     "/usr/local/bin/hermes",
     "/root/.hermes/hermes-agent/.hermes/bin/hermes",
+]
+# Cron store per profile, plus the CLI args kept for the rare fallback path.
+# `hermes cron list` boots the whole agent (≈2.5s per profile), while the wall
+# only needs scheduler metadata.  Reading jobs.json directly is the same
+# authority and turns the 5s collector into a few milliseconds.
+HERMES_PROFILES = [
+    ("default", ROOT / ".hermes" / "cron" / "jobs.json", []),
+    ("hamburger", ROOT / ".hermes" / "profiles" / "hamburger" / "cron" / "jobs.json",
+     ["-p", "hamburger"]),
 ]
 
 # command fragment -> (name, owner, log path for last-run / result evidence)
@@ -214,26 +223,78 @@ def _parse_hermes(text: str, profile: str) -> list[dict]:
     return jobs
 
 
+def _store_jobs(path: Path, profile: str) -> list[dict] | None:
+    """Read one profile's `cron/jobs.json` in the shape `_parse_hermes` emits.
+
+    Returns None when the file is missing/unreadable so the caller can fall
+    back to the CLI instead of silently reporting zero jobs.
+    """
+    data = read_json(path)
+    rows = data.get("jobs") if isinstance(data, dict) else data
+    if not isinstance(rows, list):
+        return None
+    jobs: list[dict] = []
+    for job in rows:
+        if not isinstance(job, dict):
+            continue
+        job_id = str(job.get("id") or "").strip()
+        if not job_id:
+            continue
+        schedule = job.get("schedule") if isinstance(job.get("schedule"), dict) else {}
+        # `schedule_display` mirrors what the CLI prints ("weekdays at 18:05").
+        # Fall back to the raw expression only for older stores.
+        raw_schedule = job.get("schedule_display") or schedule.get("display") or schedule.get("expr")
+        next_text = job.get("next_run_at")
+        last_text = job.get("last_run_at")
+        last_status = job.get("last_status")
+        jobs.append({
+            "id": job_id,
+            "name": str(job.get("name") or "[UNKNOWN]"),
+            "status_text": "" if job.get("enabled", True) else "disabled",
+            "profile": profile,
+            "schedule": str(raw_schedule) if raw_schedule else None,
+            "next_text": next_text if isinstance(next_text, str) else None,
+            "last_text": last_text if isinstance(last_text, str) else None,
+            "last_status": str(last_status) if last_status else "",
+        })
+    return jobs
+
+
 def _hermes_jobs() -> tuple[list[dict], str | None]:
     binary = _hermes_bin()
-    if not binary:
-        return [], "未找到 hermes 可执行文件（已查 /root/.local/bin 与 PATH）"
-    env = dict(os.environ)
-    env["PATH"] = f"{Path(binary).parent}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-    env.setdefault("HOME", str(ROOT))
     out_jobs: list[dict] = []
     errors: list[str] = []
     seen: set[str] = set()
-    for profile, args in (("default", []), ("hamburger", ["-p", "hamburger"])):
-        rc, out, err = run([binary, *args, "cron", "list"], timeout=40)
-        if rc != 0:
-            errors.append(f"{profile}: {redact(err or out or '执行失败')[:120]}")
+    fallback: list[tuple[str, list[str]]] = []
+
+    for profile, path, args in HERMES_PROFILES:
+        parsed = _store_jobs(path, profile)
+        if parsed is None:
+            fallback.append((profile, args))
             continue
-        for job in _parse_hermes(out, profile):
+        for job in parsed:
             if job["id"] in seen:
                 continue
             seen.add(job["id"])
             out_jobs.append(job)
+
+    if fallback and not binary:
+        errors.append("未找到 hermes 可执行文件（已查 /root/.local/bin 与 PATH）")
+    elif fallback:
+        env = dict(os.environ)
+        env["PATH"] = f"{Path(binary).parent}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        env.setdefault("HOME", str(ROOT))
+        for profile, args in fallback:
+            rc, out, err = run([binary, *args, "cron", "list"], timeout=40, env=env)
+            if rc != 0:
+                errors.append(f"{profile}: {redact(err or out or '执行失败')[:120]}")
+                continue
+            for job in _parse_hermes(out, profile):
+                if job["id"] in seen:
+                    continue
+                seen.add(job["id"])
+                out_jobs.append(job)
+
     return out_jobs, ("；".join(errors) if errors else None)
 
 
