@@ -72,6 +72,8 @@ header{display:block;border-bottom:1px solid var(--line);padding:8px 18px 0;back
 .bgm[data-state="muted"] .bgm__bars i,
 .bgm[data-state="waiting"] .bgm__bars i,
 .bgm[data-state="off"] .bgm__bars i{animation:none;transform:scaleY(var(--lo,.2))}
+/* 频谱驱动时关掉 CSS 错峰动画，高度由 JS 每帧写 scaleY（AudioContext 不可用时不会加这个属性） */
+.bgm[data-spectrum="1"] .bgm__bars i{animation:none;transform:scaleY(.2)}
 .bgm:focus-visible{outline:1px solid var(--pink);outline-offset:3px}
 @media (hover:hover) and (pointer:fine){ .bgm:hover{opacity:1} .bgm:hover .bgm__bars i{background:#ffc9de} }
 @media (prefers-reduced-motion:reduce){
@@ -2406,7 +2408,10 @@ pollNow();
 let last = performance.now();
 let hidden = false;
 function frame(now) {
-  if (hidden || !ready) { last = now; requestAnimationFrame(frame); return; }
+  if (hidden || !ready) {
+    if (hidden) bgmSpectrumReset();          // 标签页隐藏：竖条归位，别留一帧高峰值
+    last = now; requestAnimationFrame(frame); return;
+  }
   const dt = Math.min(0.05, (now - last) / 1000); last = now; T += dt;
   drawStage(dt);
   drawTokenFlow(dt, STATE);
@@ -2414,6 +2419,7 @@ function frame(now) {
   drawQuota(dt);
   drawActivityHeatmap();
   animateUnits(dt);
+  bgmSpectrumTick();                          // 复用主循环，不另开 rAF
   requestAnimationFrame(frame);
 }
 let rzT, ready = false, started = false;
@@ -2425,7 +2431,7 @@ function resizeAll() {
 }
 document.addEventListener('visibilitychange', () => {
   hidden = document.hidden;
-  if (hidden) { stopPolling(); return; }
+  if (hidden) { stopPolling(); bgmSpectrumReset(); return; }
   last = performance.now();
   pollNow();
 });
@@ -2459,13 +2465,99 @@ const BGM_LABEL = {
 function setBgmState(name) {
   bgmBtn.dataset.state = name;
   bgmBtn.setAttribute('aria-label', BGM_LABEL[name] || '背景音乐');
+  if (name !== 'playing') bgmSpectrumReset();          // 暂停 / 静音 / 出错：竖条归位
 }
 
-bgmAudio.addEventListener('play', () => setBgmState('playing'));
+bgmAudio.addEventListener('play', () => { setBgmState('playing'); bgmSpectrumInit(); });
 bgmAudio.addEventListener('pause', () => setBgmState(bgmAudio.error ? 'off' : 'muted'));
 bgmAudio.addEventListener('error', () => setBgmState('off'));
 
+/* ---------- 真·频谱：MediaElementSource → AnalyserNode，每帧由主 rAF 驱动 ----------
+   惰性创建：第一次 play 时才建 AudioContext（仍处在用户手势里，能正常 resume）。
+   每个 <audio> 只能 createMediaElementSource 一次 —— bgmMediaSource 就是防重入标志。
+   AudioContext 不可用 / 被 reduce-motion 关掉时不动 DOM，保留原来的 CSS 错峰动画。 */
+const BGM_BARS = Array.prototype.slice.call(document.querySelectorAll('#bgm .bgm__bars i'));
+const BGM_BANDS = BGM_BARS.length || 7;
+let bgmCtx = null, bgmAnalyser = null, bgmMediaSource = null, bgmFreq = null, bgmBands = [];
+const bgmLevels = new Float32Array(BGM_BANDS);
+// 这首曲子高频天然比低频弱 30~40dB，直接映射后三根会贴地：给高频段补一点增益
+const BGM_TILT = [0.88, 0.92, 1, 1.1, 1.3, 1.65, 2.3];
+let bgmSpectrumOn = false, bgmSpectrumDead = false;
+
+function bgmSpectrumReset() {
+  if (!bgmSpectrumOn) return;
+  for (let i = 0; i < BGM_BARS.length; i++) BGM_BARS[i].style.transform = '';
+  bgmLevels.fill(0);
+}
+
+// 对数分频：低频分得细、高频分得粗，7 根竖条才像真的在跳。
+// 上限按 8kHz 截：这首 SLOW MOTION 是低通过的（6.5kHz 以上全是 0），
+// 把频段铺到奈奎斯特会让最后两根永远贴地。
+function bgmBandRanges(bins, hz) {
+  const nyquist = (hz || 48000) / 2;
+  const span = bins - 1;
+  const ceilHz = Math.min(nyquist * 0.98, 8000);
+  const maxBin = Math.max(2, Math.round(span * ceilHz / nyquist));
+  const minBin = 1, out = [];
+  for (let i = 0; i < BGM_BANDS; i++) {
+    const lo = Math.floor(minBin * Math.pow(maxBin / minBin, i / BGM_BANDS));
+    const hi = Math.floor(minBin * Math.pow(maxBin / minBin, (i + 1) / BGM_BANDS));
+    out.push([Math.min(lo, bins - 1), Math.min(Math.max(hi, lo + 1), bins)]);
+  }
+  return out;
+}
+
+function bgmSpectrumInit() {
+  if (bgmSpectrumOn || bgmSpectrumDead) return bgmSpectrumOn;
+  if (REDUCE_MOTION) return false;                 // 用户要求减少动效：保持静态
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) { bgmSpectrumDead = true; return false; }
+  try {
+    if (!bgmCtx) bgmCtx = new Ctx();
+    if (!bgmMediaSource) {                         // ← 防重入：只建一次
+      bgmMediaSource = bgmCtx.createMediaElementSource(bgmAudio);
+      bgmAnalyser = bgmCtx.createAnalyser();
+      bgmAnalyser.fftSize = 128;
+      bgmAnalyser.smoothingTimeConstant = 0.65;
+      bgmMediaSource.connect(bgmAnalyser);
+      bgmAnalyser.connect(bgmCtx.destination);     // 别忘了接回输出，否则没声音
+      bgmFreq = new Uint8Array(bgmAnalyser.frequencyBinCount);
+      bgmBands = bgmBandRanges(bgmAnalyser.frequencyBinCount, bgmCtx.sampleRate);
+    }
+    if (bgmCtx.state === 'suspended') bgmCtx.resume().catch(function () {});
+    bgmSpectrumOn = true;
+    bgmBtn.dataset.spectrum = '1';
+    return true;
+  } catch (err) {
+    bgmSpectrumDead = true;                        // 建不起来就彻底放弃，让 CSS 动画继续跑
+    bgmSpectrumOn = false;
+    return false;
+  }
+}
+
+function bgmSpectrumTick() {
+  if (!bgmSpectrumOn || !bgmAnalyser) return;
+  if (bgmAudio.paused || bgmAudio.muted || document.hidden || bgmCtx.state !== 'running') {
+    bgmSpectrumReset();
+    return;
+  }
+  bgmAnalyser.getByteFrequencyData(bgmFreq);
+  for (let i = 0; i < BGM_BANDS; i++) {
+    const range = bgmBands[i] || [0, 1];
+    let sum = 0;
+    for (let b = range[0]; b < range[1]; b++) sum += bgmFreq[b];
+    const v = sum / Math.max(1, range[1] - range[0]) / 255;
+    const boosted = Math.min(1, v * (BGM_TILT[i] || 1));
+    // 起音立刻跟、回落慢慢收，比直接赋值更像示波器
+    bgmLevels[i] = boosted > bgmLevels[i] ? boosted : bgmLevels[i] * 0.55 + boosted * 0.45;
+    const h = 0.08 + Math.pow(Math.max(0, Math.min(1, bgmLevels[i])), 0.7) * 0.92;
+    BGM_BARS[i].style.transform = 'scaleY(' + h.toFixed(3) + ')';
+  }
+}
+
+
 function bgmPlay() {
+  bgmSpectrumInit();                                  // 首次播放才建 AudioContext（惰性）
   const p = bgmAudio.play();
   if (p && p.catch) p.catch(() => setBgmState('waiting'));   // autoplay blocked
 }
