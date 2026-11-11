@@ -10,13 +10,16 @@
   MODIFIED COPY / 修改版:
   This build is modified for the Hermes personal dashboard (agent ops wall).
   Original: https://github.com/Ryder191/haloflux
-  Modifications: rebranded copy, BGM/audio removed, fake-data generators removed,
-  panels re-bound to the owner's own read-only telemetry. Noncommercial use only.
+  Modifications: rebranded copy, fake-data generators removed, panels re-bound
+  to the owner's own read-only telemetry, plus a single owner-supplied BGM track
+  toggled from the header equalizer (starts on the first gesture when the
+  browser blocks autoplay). Noncommercial use only.
 
   源代码与视觉设计均为原创作品，受著作权保护。按 PolyForm Noncommercial 1.0.0 授权。
   仅限非商业用途，严格禁止任何商业用途。转载或二创须保留本声明并注明出处。
-  本文件为 Hermes 个人监控台的修改版：改文案、移除 BGM、移除随机数据生成器、
-  面板改接本人只读遥测数据。仅限非商业用途，详见 LICENSE。
+  本文件为 Hermes 个人监控台的修改版：改文案、移除随机数据生成器、
+  面板改接本人只读遥测数据；顶栏均衡器可开关本人提供的单曲 BGM。
+  仅限非商业用途，详见 LICENSE。
 -->
 <html lang="zh-CN">
 <head>
@@ -51,6 +54,32 @@ header{display:block;border-bottom:1px solid var(--line);padding:8px 18px 0;back
 .halo-state[data-state="stale"] i{background:transparent;border:1px solid var(--pink)}
 .halo-state[data-state="stale"]{color:var(--pink)}
 .halo-state[data-state="connecting"] i{background:var(--dim)}
+
+/* ---------- header bgm (pink equalizer, click to mute) ---------- */
+.bgm{position:relative;display:inline-flex;align-items:flex-end;margin:0;padding:0;background:none;border:0;cursor:pointer;color:var(--pink);transition:opacity .15s ease;align-self:center}
+.bgm::after{content:"";position:absolute;inset:-9px -4px}   /* ~34×29 hit area, no layout shift */
+.bgm__bars{display:flex;align-items:flex-end;gap:2px;height:11px}
+.bgm__bars i{display:block;width:2px;height:100%;background:currentColor;transform-origin:bottom;transform:scaleY(var(--lo,.2));animation:bgm-eq 1s ease-in-out infinite alternate;will-change:transform}
+.bgm__bars i:nth-child(1){--lo:.20;--hi:.62;animation-duration:820ms;animation-delay:-70ms}
+.bgm__bars i:nth-child(2){--lo:.34;--hi:1;animation-duration:640ms;animation-delay:-260ms}
+.bgm__bars i:nth-child(3){--lo:.16;--hi:.78;animation-duration:960ms;animation-delay:-140ms}
+.bgm__bars i:nth-child(4){--lo:.40;--hi:.92;animation-duration:720ms;animation-delay:-330ms}
+.bgm__bars i:nth-child(5){--lo:.22;--hi:1;animation-duration:880ms;animation-delay:-40ms}
+.bgm__bars i:nth-child(6){--lo:.30;--hi:.70;animation-duration:600ms;animation-delay:-200ms}
+.bgm__bars i:nth-child(7){--lo:.18;--hi:.84;animation-duration:1040ms;animation-delay:-120ms}
+@keyframes bgm-eq{from{transform:scaleY(var(--lo,.2))}to{transform:scaleY(var(--hi,1))}}
+.bgm[data-state="muted"]{opacity:.42}
+.bgm[data-state="muted"] .bgm__bars i,
+.bgm[data-state="waiting"] .bgm__bars i,
+.bgm[data-state="off"] .bgm__bars i{animation:none;transform:scaleY(var(--lo,.2))}
+.bgm:focus-visible{outline:1px solid var(--pink);outline-offset:3px}
+@media (hover:hover) and (pointer:fine){ .bgm:hover{opacity:1} .bgm:hover .bgm__bars i{background:#ffc9de} }
+@media (prefers-reduced-motion:reduce){
+  .bgm__bars i{animation:none;transform:scaleY(var(--hi,.8))}
+  .bgm[data-state="muted"] .bgm__bars i,
+  .bgm[data-state="waiting"] .bgm__bars i,
+  .bgm[data-state="off"] .bgm__bars i{transform:scaleY(var(--lo,.2))}
+}
 .brand h1{white-space:nowrap;margin:0;font-size:21px;font-weight:800;letter-spacing:1.5px;color:var(--white)}
 .brand p{margin:3px 0 9px;font-size:8px;color:var(--dim);letter-spacing:1.1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kpi{padding:0 10px 9px;position:relative}
@@ -179,6 +208,11 @@ header{display:block;border-bottom:1px solid var(--line);padding:8px 18px 0;back
       <span class="topbar__sep">/</span>
       <span class="cn">READ ONLY · ASIA/SHANGHAI</span>
       <span class="topbar__spacer"></span>
+      <button type="button" class="bgm" id="bgm" data-state="waiting"
+        aria-label="背景音乐：待播放，点击开始"
+        title="SLOW MOTION (CASTLE. Remix) — 点击静音 / 再点播放">
+        <span class="bgm__bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      </button>
       <span class="halo-state" id="haloState" data-state="connecting"><i></i><b id="haloStateText">CONNECTING</b></span>
       <span class="topbar__sep">/</span>
       <span id="haloUpdated" class="tabular">—</span>
@@ -2406,8 +2440,56 @@ function toggleFS() {
 document.addEventListener('dblclick', toggleFS);
 
 
-/* BGM and the hidden tuning console were removed in the Hermes build.
-   The visual parameters above stay as a plain object (C) for future tuning. */
+/* =========================================================
+   HEADER BGM — one local track, equalizer doubles as mute toggle
+   ========================================================= */
+const bgmBtn = document.getElementById('bgm');
+const bgmAudio = new Audio('slow-motion.mp3');
+bgmAudio.loop = true;
+bgmAudio.preload = 'auto';
+bgmAudio.volume = 0.5;
+
+const BGM_LABEL = {
+  playing: '背景音乐播放中，点击静音',
+  muted: '背景音乐已静音，点击播放',
+  waiting: '背景音乐待播放，点击开始',
+  off: '背景音乐不可用',
+};
+
+function setBgmState(name) {
+  bgmBtn.dataset.state = name;
+  bgmBtn.setAttribute('aria-label', BGM_LABEL[name] || '背景音乐');
+}
+
+bgmAudio.addEventListener('play', () => setBgmState('playing'));
+bgmAudio.addEventListener('pause', () => setBgmState(bgmAudio.error ? 'off' : 'muted'));
+bgmAudio.addEventListener('error', () => setBgmState('off'));
+
+function bgmPlay() {
+  const p = bgmAudio.play();
+  if (p && p.catch) p.catch(() => setBgmState('waiting'));   // autoplay blocked
+}
+
+bgmBtn.addEventListener('click', () => {
+  if (bgmAudio.paused) bgmPlay();
+  else bgmAudio.pause();
+});
+
+/* Autoplay is usually blocked until a gesture: start on the first one.
+   Clicks on the player itself are left to its own handler above. */
+function bgmArm(e) {
+  if (e.target && e.target.closest && e.target.closest('#bgm')) return;
+  document.removeEventListener('pointerdown', bgmArm, true);
+  document.removeEventListener('keydown', bgmArm, true);
+  if (bgmAudio.paused && bgmBtn.dataset.state !== 'muted') bgmPlay();
+}
+document.addEventListener('pointerdown', bgmArm, true);
+document.addEventListener('keydown', bgmArm, true);
+
+bgmPlay();
+
+/* The hidden tuning console stays removed in the Hermes build.
+   The visual parameters above remain a plain object (C) for future tuning. */
 </script>
 </body>
 </html>
