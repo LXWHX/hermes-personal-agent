@@ -119,7 +119,7 @@ def collect(services: dict, jobs: dict, errors: dict, board: dict, activity: dic
         },
         {
             "id": "hamburger", "name": "汉堡", "latin": "HAMBURGER",
-            "role": "DISCORD + 小黑盒", "platform": "Discord · 冲冲冲",
+            "role": "DISCORD + 黑盒语音", "platform": "Discord · 冲冲冲",
             "state": burger_state[0], "state_label": burger_state[1],
             "uptime_seconds": eye.get("uptime_seconds"),
             "last_active": burger_last or eye.get("since"),
@@ -134,11 +134,11 @@ def collect(services: dict, jobs: dict, errors: dict, board: dict, activity: dic
                 {"label": "游戏快报", "value": _result_cn(game_news.get("result")),
                  "note": f"上次 {_short_time(game_news.get('last_run'))}"},
             ],
-            "headline": f"Discord + 小黑盒 · 今日消息 {burger_msgs if burger_msgs is not None else '—'}",
+            "headline": f"Discord + 黑盒语音 · 今日消息 {burger_msgs if burger_msgs is not None else '—'}",
         },
         {
             "id": "biubiu", "name": "biubiu", "latin": "BIUBIU",
-            "role": "铲铲大王房 · SIDECAR", "platform": "小黑盒 · 房间",
+            "role": "铲铲大王房 · SIDECAR", "platform": "黑盒语音 · 房间",
             "state": biu_state[0], "state_label": biu_state[1],
             "uptime_seconds": biubiu.get("uptime_seconds"),
             "last_active": biu_last or biubiu.get("since"),

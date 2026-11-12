@@ -167,7 +167,7 @@ def _crontab() -> tuple[list[dict], int, str | None]:
                 name = "昵称签名"
                 owner = "系统"
                 if "hermes-heybox" in command:
-                    name = "昵称签名 · 小黑盒"
+                    name = "昵称签名 · 黑盒语音"
                     log_path = "/root/hermes-heybox/nickname-presence.log"
                 elif "hermes-biubiu" in command:
                     name = "昵称签名 · biubiu"

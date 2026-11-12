@@ -20,7 +20,7 @@ from util import iso, run
 PROBES = [
     ("telegram", "Telegram API", "https://api.telegram.org/"),
     ("discord", "Discord API", "https://discord.com/api/v10/gateway"),
-    ("xiaoheihe", "小黑盒", "https://chat.xiaoheihe.cn/"),
+    ("xiaoheihe", "黑盒语音", "https://chat.xiaoheihe.cn/"),
     ("opencode", "OpenCode", "https://opencode.ai/"),
 ]
 UA = "HermesDashboard/1.0"

@@ -3,7 +3,7 @@
 There is one SQLite DB per profile:
   ~/.hermes/state.db                       -> 憨包 (default)
   ~/.hermes/profiles/hamburger/state.db    -> 汉堡 (Discord)
-  ~/.hermes/profiles/heybox/state.db       -> 汉堡 (小黑盒)
+  ~/.hermes/profiles/heybox/state.db       -> 汉堡 (黑盒语音)
   ~/.hermes/profiles/biubiu/state.db       -> biubiu
 All are opened with `mode=ro` (never `immutable=1`), and only role/timestamp
 metadata is read — never message content.

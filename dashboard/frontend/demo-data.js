@@ -50,7 +50,7 @@ window.HERMES_DEMO = {
     "id": "hamburger",
     "name": "汉堡",
     "latin": "HAMBURGER",
-    "role": "DISCORD + 小黑盒",
+    "role": "DISCORD + 黑盒语音",
     "platform": "Discord · 冲冲冲",
     "state": "typing",
     "state_label": "正在回复",
@@ -85,7 +85,7 @@ window.HERMES_DEMO = {
     "name": "biubiu",
     "latin": "BIUBIU",
     "role": "铲铲大王房 · SIDECAR",
-    "platform": "小黑盒 · 房间",
+    "platform": "黑盒语音 · 房间",
     "state": "offline",
     "state_label": "离线",
     "uptime_seconds": 0,
@@ -1458,7 +1458,7 @@ window.HERMES_DEMO = {
     "next_run": "2026-11-12T10:00:00+08:00",
     "duration_s": 118,
     "result": "success",
-    "summary": "DC #教义厅 + 小黑盒 双投"
+    "summary": "DC #教义厅 + 黑盒语音 双投"
    },
    {
     "id": "游戏快报",
@@ -5095,7 +5095,7 @@ window.HERMES_DEMO = {
       "note": "静默"
      },
      {
-      "target": "小黑盒",
+      "target": "黑盒语音",
       "ok": true,
       "note": "静默"
      }
@@ -5170,7 +5170,7 @@ window.HERMES_DEMO = {
    "Telegram",
    "DC #教义厅",
    "冲冲冲房",
-   "小黑盒",
+   "黑盒语音",
    "BiuNews",
    "Bark"
   ]
@@ -7382,7 +7382,7 @@ window.HERMES_DEMO = {
     "available": true
    },
    {
-    "label": "小黑盒 / biubiu",
+    "label": "黑盒语音 / biubiu",
     "key": "sidecar",
     "remaining": 86,
     "rolling": 9,
@@ -8665,7 +8665,7 @@ window.HERMES_DEMO = {
    },
    {
     "id": "xiaoheihe",
-    "name": "小黑盒",
+    "name": "黑盒语音",
     "ok": true,
     "status": 200,
     "latency_ms": 64
@@ -8743,7 +8743,7 @@ window.HERMES_DEMO = {
     "type": "output",
     "severity": "info",
     "title": "每日教义已发布",
-    "detail": "DC #教义厅 + 小黑盒",
+    "detail": "DC #教义厅 + 黑盒语音",
     "role": "hamburger"
    },
    {

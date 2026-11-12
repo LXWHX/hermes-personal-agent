@@ -26,7 +26,7 @@ DELIVERY_WORDS = [
     ("Telegram", ("telegram", "tg")),
     ("DC #教义厅", ("discord", "教义厅", "dc")),
     ("冲冲冲房", ("冲冲冲", "guild")),
-    ("小黑盒", ("heybox", "黑盒")),
+    ("黑盒语音", ("heybox", "黑盒")),
     ("BiuNews", ("biunews",)),
     ("Bark", ("bark",)),
 ]

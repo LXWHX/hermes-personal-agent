@@ -17,8 +17,8 @@
 | 角色 | 形态 | 角色专属指标 |
 |---|---|---|
 | 憨包 | Telegram 主秘书 + cron | 心跳轮次、早报、PLAN/STATUS 板、错误巡视、提醒是否发出 |
-| 汉堡 | Discord profile + 小黑盒「汉堡大王」+ Eye | DC 频道/线程活跃、教义发布、Eye 观察、双平台是否都在线 |
-| biubiu | 小黑盒「铲铲大王房」sidecar | 房间在线人数、语音回合、BiuNews 投递、独立额度消耗 |
+| 汉堡 | Discord profile + 黑盒语音「汉堡大王」+ Eye | DC 频道/线程活跃、教义发布、Eye 观察、双平台是否都在线 |
+| biubiu | 黑盒语音「铲铲大王房」sidecar | 房间在线人数、语音回合、BiuNews 投递、独立额度消耗 |
 
 原则：
 - **只读**。面板不写任何线上状态（不触发 cron、不改 board、不动配置文件）。
@@ -84,8 +84,8 @@
 
 **10. 统一日志流**：三端日志聚合，按角色/级别过滤，SSE 实时 tail
 **11. 配置漂移**：SOUL.md / config.yaml / 部署脚本最后部署时间、git commit、线上与仓库是否一致
-**12. 系统资源**：CPU/内存/磁盘、东京节点网络延迟、Telegram/Discord/小黑盒 API 可达性
-**13. 记忆与群活跃**：mem0 各 collection 条数、DC 频道与小黑盒房间活跃 Top
+**12. 系统资源**：CPU/内存/磁盘、东京节点网络延迟、Telegram/Discord/黑盒语音 API 可达性
+**13. 记忆与群活跃**：mem0 各 collection 条数、DC 频道与黑盒语音房间活跃 Top
 
 ---
 
@@ -397,7 +397,7 @@ server/dashboard-deploy.sh    # 幂等部署 + systemd
 - 实测（12:17）：仓库 HEAD `0c27f67` dirty=0；4 个 SOUL 副本 `same`（heybox/biubiu 按
   `SOUL.md + "\n\n" + PROFILE_EXTRA.md` 拼接比对成立）；config.yaml `template`（手工同步
   模板，差异属预期）；1 核 / 负载 0.49 / 内存 45.7% / swap 15.2% / 磁盘 42.4% /
-  swappiness 10 / MALLOC_ARENA_MAX 2；Telegram·Discord·小黑盒·OpenCode 四路出站全部 200
+  swappiness 10 / MALLOC_ARENA_MAX 2；Telegram·Discord·黑盒语音·OpenCode 四路出站全部 200
   （0.9–2.6s，东京单核冷连接正常水平）。
 - 出站探测口径：**拿到任何 HTTP 应答（含 4xx/5xx）即算可达**；只有超时/DNS/连接失败才标
   DOWN。延迟为完整 TLS 建连 + 响应头耗时，非 ping。

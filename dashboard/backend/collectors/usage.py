@@ -25,7 +25,7 @@ UA = "HermesDashboard/1.0"
 SOURCES = [
     ("main", "主线路", ROOT / ".hermes" / ".env", "OPENCODE_GO_API_KEY"),
     ("hamburger", "汉堡", ROOT / ".hermes" / "profiles" / "hamburger" / ".env", "OPENCODE_GO_API_KEY"),
-    ("sidecar", "小黑盒", ROOT / "hermes-heybox" / ".env", "OPENCODE_API_KEY"),
+    ("sidecar", "黑盒语音", ROOT / "hermes-heybox" / ".env", "OPENCODE_API_KEY"),
     ("biubiu", "biubiu", ROOT / "hermes-biubiu" / ".env", "OPENCODE_API_KEY"),
 ]
 

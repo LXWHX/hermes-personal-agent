@@ -1475,7 +1475,7 @@ function renderLog(state) {
 }
 
 /* ---------- delivery routes ---------- */
-const CHANNEL_SHORT = { 'Telegram': 'TG', 'DC #教义厅': 'DC', '冲冲冲房': 'GUILD', '小黑盒': 'HX', 'BiuNews': 'NEWS', 'Bark': 'BARK' };
+const CHANNEL_SHORT = { 'Telegram': 'TG', 'DC #教义厅': 'DC', '冲冲冲房': 'GUILD', '黑盒语音': 'HX', 'BiuNews': 'NEWS', 'Bark': 'BARK' };
 const shortChannel = v => CHANNEL_SHORT[v] || String(v || DASH).replace(/^DC\s*/, '').slice(0, 5);
 const DEFAULT_CHANNELS = ['TG', 'DC', 'HX', 'BARK'];
 function renderRoutes(state) {
