@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -182,6 +183,15 @@ def _canon_json(data: bytes, ignore: tuple[str, ...] = ()) -> bytes | None:
     return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
+def _normalize(data: bytes) -> bytes:
+    """把连续空行压成一行、去掉首尾空白再比。
+
+    deploy 脚本用 `cat SOUL; printf '\n\n'; cat EXTRA` 拼接，SOUL 本身已带换行，
+    于是线上比仓库多一个空行 —— 只差空行不算 drift，否则这条永远是红的。
+    """
+    return re.sub(rb"\n{3,}", b"\n\n", data or b"").strip() + b"\n"
+
+
 def _max_mtime(paths) -> str | None:
     values = [v for v in (_mtime(Path(p)) for p in paths) if v]
     return max(values) if values else None
@@ -264,7 +274,7 @@ def _plain_artifact(spec: dict) -> dict:
         status = "repo_missing"
     elif live is None:
         status = "live_missing"
-    elif _digest(JOIN.join(parts)) == _digest(live):
+    elif _digest(_normalize(JOIN.join(parts))) == _digest(_normalize(live)):
         status = "same"
     else:
         status = "drift"
