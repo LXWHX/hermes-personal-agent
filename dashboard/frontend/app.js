@@ -116,8 +116,7 @@
     }
   }
 
-  function scramble(el) {
-    const spans = $$('.wm-l');
+  function scramble(el, spans = $$('.wm-l')) {
     if (!spans.length || el.dataset.scrambling) return;
     el.dataset.scrambling = '1';
     let frame = 0;
@@ -128,6 +127,51 @@
       });
       if (frame >= 5 + spans.length * 2) { clearInterval(timer); delete el.dataset.scrambling; }
     }, 40);
+  }
+
+  /* a wordmark enters by rising its letters (CSS wm-rise), decodes each glyph,
+     then replays the whole entrance on a random loop; hover only re-decodes */
+  function initWordmark(wm, spans, { startDelay = 120, waitMin = 5000, waitMax = 15000, replayOnEnter = false } = {}) {
+    if (!wm || !spans.length) return;
+    spans.forEach((span) => { span.dataset.ch = span.textContent; });
+    let replayTimer = 0;
+    let scrambleTimer = 0;
+
+    const play = (delay) => {
+      clearTimeout(scrambleTimer);
+      scrambleTimer = setTimeout(() => scramble(wm, spans), delay);
+    };
+
+    const entrance = () => {
+      spans.forEach((span) => { span.style.animation = 'none'; });
+      void wm.offsetWidth;
+      spans.forEach((span) => { span.style.animation = ''; });
+      play(120);
+    };
+
+    const schedule = () => {
+      clearTimeout(replayTimer);
+      const wait = waitMin + Math.random() * (waitMax - waitMin);
+      replayTimer = setTimeout(() => {
+        if (!document.hidden) entrance();
+        schedule();
+      }, wait);
+    };
+
+    wm.addEventListener('mouseenter', () => { play(0); schedule(); });
+    if (replayOnEnter && 'IntersectionObserver' in window) {
+      /* below-the-fold wordmarks replay their entrance the first time they
+         come into view instead of burning it off-screen */
+      const io = new IntersectionObserver((entries, obs) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        entrance();
+        obs.disconnect();
+      });
+      io.observe(wm);
+    } else {
+      play(startDelay);
+    }
+    schedule();
   }
 
   /* ------------------------------------------------- cursor layer (v2) */
@@ -1649,43 +1693,14 @@
           scheduleOpsSpin(OPS_WAIT_MIN_MS);
         }
       });
-      const wm = $('.wordmark h1');
-      const wmSpans = $$('.wm-l');
-      wmSpans.forEach((span) => { span.dataset.ch = span.textContent; });
-      if (wm) {
-        const REPLAY_MIN_MS = 5000;
-        const REPLAY_MAX_MS = 15000;
-        let replayTimer = 0;
-        let scrambleTimer = 0;
-
-        /* hover replays the glyph decode only */
-        const play = (scrambleDelay) => {
-          clearTimeout(scrambleTimer);
-          scrambleTimer = setTimeout(() => scramble(wm), scrambleDelay);
-        };
-
-        /* full entrance = slide-up (wm-rise restart) + decode overlapping it */
-        const entrance = () => {
-          wmSpans.forEach((span) => { span.style.animation = 'none'; });
-          void wm.offsetWidth;
-          wmSpans.forEach((span) => { span.style.animation = ''; });
-          play(120);
-        };
-
-        const schedule = () => {
-          clearTimeout(replayTimer);
-          const wait = REPLAY_MIN_MS + Math.random() * (REPLAY_MAX_MS - REPLAY_MIN_MS);
-          replayTimer = setTimeout(() => {
-            if (!document.hidden) entrance();
-            schedule();
-          }, wait);
-        };
-
-        wm.addEventListener('mouseenter', () => { play(0); schedule(); });
-        /* on load the CSS wm-rise is already running; just overlap the decode */
-        play(120);
-        schedule();
-      }
+      initWordmark($('.wordmark h1'), $$('.wm-l'));
+      /* footer READ ONLY mirrors the masthead wordmark, on a slightly slower
+         loop so the two never decode in lockstep */
+      initWordmark($('.footer__word'), $$('.footer__letter'), {
+        waitMin: 7000,
+        waitMax: 18000,
+        replayOnEnter: true,
+      });
       if ('IntersectionObserver' in window) {
         const reveal = new IntersectionObserver((entries, obs) => {
           for (const entry of entries) {

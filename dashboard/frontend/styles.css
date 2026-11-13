@@ -1416,6 +1416,13 @@ main { padding: 0 var(--pad); }
     animation: wm-rise 0.55s var(--ease-mech) both;
     animation-delay: calc(0.06s + var(--i, 0) * 55ms);
   }
+  /* footer READ ONLY mirrors the masthead wordmark: one glyph per span,
+     same rise + stagger so it can decode and replay alongside it */
+  html.js-motion .footer__letter {
+    display: inline-block;
+    animation: wm-rise 0.55s var(--ease-mech) both;
+    animation-delay: calc(0.06s + var(--i, 0) * 55ms);
+  }
   html.js-motion .wordmark__aside { animation: fade-up var(--slow) var(--ease-mech) 0.3s both; }
   html.js-motion .ops-launch { animation: fade-up var(--slow) var(--ease-mech) 0.3s both; }
   /* the plate + frame turn a quarter and grow back while the label holds
