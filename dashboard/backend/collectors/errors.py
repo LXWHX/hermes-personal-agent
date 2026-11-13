@@ -29,6 +29,24 @@ def _source_levels(source: dict) -> dict[str, int]:
     return levels
 
 
+
+# 归档里的「状态」常带括号备注（"已修复（2026-11-04，...）"），严格相等匹配会把它们全算成待批
+# （2026-11-13 面板显示 14 条待批的真因）。这里按前缀归一：只要以规范状态开头就算该状态。
+_STATUS_PREFIXES = (
+    ("已修复", "已修复"), ("已结案", "已修复"), ("已关闭", "已忽略"), ("已搁置", "已忽略"),
+    ("已忽略", "已忽略"), ("已消退", "已消退"), ("已批准", "已批准"), ("修复中", "修复中"),
+    ("待批", "待批"),
+)
+
+
+def _status_key(raw: str) -> str:
+    text = (raw or "").strip()
+    for prefix, key in _STATUS_PREFIXES:
+        if text.startswith(prefix):
+            return key
+    return "待批"
+
+
 def _approvals() -> dict:
     items = []
     if not APPROVALS.is_dir():
@@ -82,8 +100,7 @@ def _approvals() -> dict:
         })
     counts = {key: 0 for key in STATUS_ORDER}
     for item in items:
-        key = item["status"] if item["status"] in counts else "待批"
-        counts[key] += 1
+        counts[_status_key(item["status"])] += 1
     pending = counts.get("待批", 0) + counts.get("已批准", 0) + counts.get("修复中", 0)
     return {"items": items, "counts": counts, "pending": pending}
 
