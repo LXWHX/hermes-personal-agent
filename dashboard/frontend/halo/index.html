@@ -1737,6 +1737,11 @@ const UPTIME = {
   histTarget: new Array(48).fill(0),
   known: new Array(48).fill(0),
   knownTarget: new Array(48).fill(0),
+  // UP/24H 波形：原站 bounce 层的随机脉冲 + 慢呼吸 + 快起慢落
+  wave: new Array(48).fill(0.85),
+  kick: new Array(48).fill(0),
+  phase: Array.from({ length: 48 }, () => rnd() * TAU),
+  lastBeat: -1,
 };
 function buildUptime(state) {
   const units = (state?.services || []).slice(0, 6);
@@ -1771,6 +1776,38 @@ function buildUptime(state) {
   if (UPTIME.hist.length !== 48) {
     UPTIME.hist = hist.slice();
     UPTIME.known = known.slice();
+  }
+}
+
+/* UP/24H wave — the original HALOFLUX bounce layer, scaled down to one row:
+   every bar breathes on its own phase, a crest travels left→right, and each
+   beat drops a few gaussian kicks. The target snaps out fast and eases back
+   slowly, so the row moves like a wave instead of a static bar chart. */
+function updateUptimeWave(dt) {
+  const wave = UPTIME.wave, kick = UPTIME.kick;
+  if (REDUCE_MOTION) { wave.fill(1); kick.fill(0); return; }
+  if (beatN !== UPTIME.lastBeat) {
+    UPTIME.lastBeat = beatN;
+    const big = beatN % 4 === 0;
+    const bursts = big ? 3 : 1 + (rnd() * 2 | 0);
+    for (let b = 0; b < bursts; b++) {
+      const c = rnd() * (wave.length - 1);
+      const w = rr(2.5, 7);
+      const amp = rr(0.12, big ? 0.34 : 0.26);
+      for (let i = 0; i < wave.length; i++) {
+        const f = Math.exp(-(((i - c) / w) ** 2));
+        if (f < 0.02) continue;
+        const v = amp * f;
+        if (v > kick[i]) kick[i] = v;
+      }
+    }
+  }
+  for (let i = 0; i < wave.length; i++) {
+    const idle = 0.76 + 0.08 * Math.sin(T * 0.9 + UPTIME.phase[i]);
+    const crest = 0.05 * Math.sin(i * 0.5 - T * 1.4 + UPTIME.phase[i] * 0.3);
+    const tgt = Math.min(1.24, idle + crest + kick[i]);
+    kick[i] *= Math.exp(-dt * 2.4);
+    wave[i] += (tgt - wave[i]) * Math.min(1, (tgt > wave[i] ? 15 : 2.2) * dt);
   }
 }
 
@@ -1838,13 +1875,15 @@ function drawServiceUptime(dt) {
     UPTIME.hist[i] += (UPTIME.histTarget[i] - UPTIME.hist[i]) * ease;
     UPTIME.known[i] += (UPTIME.knownTarget[i] - UPTIME.known[i]) * ease;
   }
+  updateUptimeWave(dt);
   for (let i = 0; i < cols; i++) {
     const known = UPTIME.known[i] || 0;
     const down = UPTIME.hist[i] || 0;
     const up = Math.max(0, known - down);
     const full = bh - 4;
-    const totalH = (known / rows) * full;
-    const upH = (up / rows) * full;
+    const wave = UPTIME.wave[i] || 1;
+    const totalH = Math.min(bh - 1, (known / rows) * full * wave);
+    const upH = Math.min(totalH, (up / rows) * full * wave);
     const downH = Math.max(0, totalH - upH);
     if (totalH < 0.6) {
       x.fillStyle = '#1c1f24';
@@ -1857,6 +1896,10 @@ function drawServiceUptime(dt) {
       x.fillStyle = 'rgba(240,166,198,.78)';
       x.fillRect(lx + i * bw, h - 1 - totalH, Math.max(0.6, bw - 0.7), downH);
     }
+    // lit crest: keeps the wave readable when every segment is at 100% up
+    const crestA = 0.08 + 0.34 * Math.min(1, Math.max(0, wave - 0.65) / 0.6);
+    x.fillStyle = `rgba(214,218,226,${crestA.toFixed(3)})`;
+    x.fillRect(lx + i * bw, h - 1 - totalH, Math.max(0.6, bw - 0.7), 1);
   }
   // right-edge "now" marker, soft pulse only (the heatmap owns the sweeping scan)
   x.fillStyle = `rgba(240,166,198,${(0.16 + 0.1 * (0.5 + 0.5 * Math.sin(T * 2))).toFixed(3)})`;
@@ -2453,7 +2496,7 @@ const bgmBtn = document.getElementById('bgm');
 const bgmAudio = new Audio('slow-motion.mp3');
 bgmAudio.loop = true;
 bgmAudio.preload = 'auto';
-bgmAudio.volume = 0.5;
+bgmAudio.volume = 0.4;                               // 0.5 × 0.8：整体调低 20%
 
 const BGM_LABEL = {
   playing: '背景音乐播放中，点击静音',
