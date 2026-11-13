@@ -60,15 +60,27 @@ def _segments(unit: str, active: bool) -> tuple[list[dict], str]:
             events.append((ts.astimezone(TZ), state))
     events.sort(key=lambda item: item[0])
 
-    state = active
+    # 只看「成对的」停机区间：Stopping → 之后必须有一次 Started 才算真停机。
+    # systemd 偶尔不写 Started 行（2026-11-13 的 hermes-eye 就是这样：只有 06:28 一条
+    # Stopping，之后跑了 10 小时），旧逻辑会把后面所有时间段都刷成 down，
+    # 看板上那条时间轴整片红 —— 其实服务好好的。
+    downtime: list[tuple[datetime, datetime]] = []
+    open_stop: datetime | None = None
+    for ts, value in events:
+        if not value:
+            open_stop = ts
+        elif open_stop is not None:
+            downtime.append((open_stop, ts))
+            open_stop = None
+    if open_stop is not None and not active:
+        downtime.append((open_stop, end))   # 现在都没在跑，那就是真停机到现在
+
     segments = []
     cursor = start
     for _ in range(48):
         seg_end = cursor + timedelta(minutes=30)
-        for ts, value in events:
-            if cursor <= ts < seg_end:
-                state = value
-        segments.append({"start": cursor.isoformat(timespec="minutes"), "up": state})
+        down = any(s < seg_end and e > cursor for s, e in downtime)
+        segments.append({"start": cursor.isoformat(timespec="minutes"), "up": not down})
         cursor = seg_end
     last = "本周期无重启"
     if events:
