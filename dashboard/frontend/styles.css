@@ -1222,11 +1222,19 @@ main { padding: 0 var(--pad); }
 .footer__col .kicker { margin-bottom: 7px; }
 .footer__col--right { text-align: right; }
 .footer__word {
+  position: relative;
   font-size: clamp(44px, 6vw, 92px);
   font-weight: 700;
   line-height: 0.74;
   letter-spacing: -0.06em;
   text-transform: uppercase;
+}
+/* static ghost keeps the auto grid column at the word's natural width while
+   the live layer scrambles; glyph swaps must never reflow DATA POLICY */
+.footer__word-ghost { visibility: hidden; }
+.footer__word-live {
+  position: absolute;
+  inset: 0;
 }
 
 /* system status: toc-rail pill — links out to the /halo/ wall */
