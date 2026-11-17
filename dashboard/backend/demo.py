@@ -24,8 +24,8 @@ def roles() -> dict:
             "state": "degraded",
             "label": "部分降级",
             "note": "1 个角色离线 · 1 个任务失败 · 1 条任务逾期",
-            "online_services": 5,
-            "total_services": 6,
+            "online_services": 6,
+            "total_services": 7,
             "open_approvals": 3,
             "overdue_tasks": 1,
             "failed_jobs": 1,
@@ -110,6 +110,7 @@ def services() -> dict:
         ("hermes-eye", "汉堡之眼", "hamburger", "active", "running", 0, 92_000_000, 8_100_000_000, 9 * 86400 + 2 * 3600),
         ("hamburger-nightwatch", "夜巡", "hamburger", "active", "running", 0, 41_000_000, 1_200_000_000, 9 * 86400 + 2 * 3600),
         ("hamburger-guild-guard", "公会守卫", "hamburger", "active", "running", 0, 37_000_000, 900_000_000, 9 * 86400 + 2 * 3600),
+        ("hermes-kb", "问答知识库", "kb", "active", "running", 0, 48_000_000, 2_400_000_000, 6 * 86400 + 3 * 3600),
     ]
     out = []
     for unit, label, role, active, sub, restarts, mem, cpu, uptime in units:
@@ -144,7 +145,7 @@ def services() -> dict:
             "manual": [{"text": "手动重启 08:02:10（有 Stopping 记录，不计）"}],
             "crash": [],
         },
-        "summary": {"total": 6, "online": 5, "restarts_24h": 1},
+        "summary": {"total": 7, "online": 6, "restarts_24h": 1},
     }
 
 
