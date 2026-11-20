@@ -119,6 +119,13 @@ sup { font-size: 0.45em; vertical-align: super; }
 }
 .rail::-webkit-scrollbar { display: none; }
 .rail__mark { font-weight: 700; letter-spacing: 0.18em; }
+.rail__mark-img {
+  width: 18px;
+  height: 18px;
+  border-radius: 18%;
+  vertical-align: -3px;
+  margin-right: 8px;
+}
 .rail__sep { color: var(--line); }
 .rail__spacer { flex: 1; }
 .rail #poll-state { min-width: 70px; text-align: right; }
@@ -130,6 +137,20 @@ sup { font-size: 0.45em; vertical-align: super; }
   justify-content: space-between;
   gap: 24px;
   padding: 18px 0 10px;
+}
+.wordmark__left {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+/* 汉堡小人：和巨大 wordmark 底边对齐，40px 只是「盖章」而不是徽标 */
+.wordmark__mark {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 6px;
+  border-radius: 18%;
 }
 .wordmark h1 {
   margin-left: -0.055em;
@@ -1213,17 +1234,21 @@ main { padding: 0 var(--pad); }
 
 /* --------------------------------------------------------------- footer */
 .footer {
+  /* 0.32em = the wm-rise offset of the READ ONLY letters. The footer keeps
+     that much extra room below the word so the entrance replay can never
+     grow the document (which made the page jump on every loop). */
+  --footer-word-size: clamp(44px, 6vw, 92px);
   display: grid;
   grid-template-columns: 1fr 1fr auto;
   gap: 30px;
   align-items: end;
-  padding: 26px var(--pad) 20px;
+  padding: 26px var(--pad) calc(20px + var(--footer-word-size) * 0.32);
 }
 .footer__col .kicker { margin-bottom: 7px; }
 .footer__col--right { text-align: right; }
 .footer__word {
   position: relative;
-  font-size: clamp(44px, 6vw, 92px);
+  font-size: var(--footer-word-size);
   font-weight: 700;
   line-height: 0.74;
   letter-spacing: -0.06em;
@@ -1235,6 +1260,9 @@ main { padding: 0 var(--pad); }
 .footer__word-live {
   position: absolute;
   inset: 0;
+  /* inline-block glyphs are a hair wider than the ghost's plain text, so
+     without this READ wraps before the D and the word grows a third line */
+  white-space: nowrap;
 }
 
 /* system status: toc-rail pill — links out to the /halo/ wall */
@@ -1324,6 +1352,9 @@ main { padding: 0 var(--pad); }
   :root { --pad: 16px; }
   .wordmark { flex-direction: column; align-items: flex-start; gap: 12px; }
   .wordmark h1 { font-size: clamp(64px, 22vw, 150px); }
+  /* 窄屏时字标会换行，头像改到字标上方当「报头小印」，避免孤零零吊在左下角 */
+  .wordmark__left { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .wordmark__mark { width: 28px; height: 28px; margin-bottom: 0; }
   .wordmark__right { gap: 14px; }
   .ops-launch { width: 72px; height: 72px; }
   .ops-launch__label { padding: 7px 7px 6px; }
@@ -1339,7 +1370,7 @@ main { padding: 0 var(--pad); }
   .section-head .stamp { grid-column: 3; grid-row: 1; }
   .status-bar { flex-wrap: wrap; gap: 4px 10px; }
   .status-bar__spacer { display: none; }
-  .footer { grid-template-columns: 1fr; align-items: start; gap: 18px; }
+  .footer { --footer-word-size: 64px; grid-template-columns: 1fr; align-items: start; gap: 18px; }
   .footer__col--right { text-align: left; }
   .footer__word { font-size: 64px; }
   .sys-wrap { margin-bottom: 14px; }
